@@ -57,6 +57,7 @@ class Model(object):
     >>> test_loss = model.test({"x": data})
 
     """
+    __counter = 0
 
     def __init__(self, loss,
                  test_loss=None,
@@ -220,3 +221,122 @@ class Model(object):
         """
         checkpoint = torch.load(path)
         self.distributions.load_state_dict(checkpoint['distributions'])
+
+    def setup_serket(self, name="", learnable=True):
+        """Set up Serket.
+
+        Parameters
+        ----------
+        name : str
+            Name of Serket
+        learnable : bool
+            If True, the parameters of Serket are optimized.
+
+        """
+        self.__name = "module%03d_" % self.__counter + name
+        self.__counter += 1
+        self.__forward_prob = None
+        self.__backward_prob = None
+        self.__learnable = learnable
+        self.__observations = None
+
+    def set_forward_msg(self, prob):
+        """Set forward message.
+
+        Parameters
+        ----------
+        prob : numpy.ndarray
+            Forward message
+
+        """
+        self.__forward_prob = prob
+
+    def get_forward_msg(self):
+        """Get forward message.
+
+        Returns
+        -------
+        numpy.ndarray
+            Forward message
+        """
+        return self.__forward_prob
+
+    def get_name(self):
+        """Get name of Serket.
+
+        Returns
+        -------
+        str
+            Name of Serket
+
+        """
+        return self.__name
+
+    def connect(self, *obs):
+        """Connect Serket to observation nodes.
+
+        Parameters
+        ----------
+        obs : list of Observation
+            Observation nodes
+
+        """
+        self.__observations = obs
+
+    def get_observations(self):
+        """Get observation nodes.
+
+        Returns
+        -------
+        list of Observation
+            Observation nodes
+
+        """
+        return [ np.array(o.get_forward_msg()) for o in self.__observations ]
+
+    def get_backward_msg(self):
+        """Get backward message.
+
+        Returns
+        -------
+        numpy.ndarray
+            Backward message
+
+        """
+        return self.__backward_prob
+
+    def set_backward_msg(self, prob):
+        """Set backward message.
+
+        Parameters
+        ----------
+        prob : numpy.ndarray
+            Backward message
+
+        """
+        self.__backward_prob = prob
+
+    def send_backward_msgs(self, probs):
+        """Send backward messages to observation nodes.
+
+        Parameters
+        ----------
+        probs : list of numpy.ndarray
+            Backward messages
+
+        """
+        for i in range(len(self.__observations)):
+            self.__observations[i].set_backward_msg( probs[i] )
+
+    def update(self):
+        """Update parameters of Serket.
+
+        """
+        raise NotImplementedError
+
+
+class Observation(Module):
+    def __init__(self, data, name="obs"):
+        self.setup_serket(Observation,self).__init__(name=name, learnable=False)
+
+        self.set_forward_msg(data)
