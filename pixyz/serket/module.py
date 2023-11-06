@@ -3,7 +3,7 @@ import torch
 from torch.nn.utils import clip_grad_norm_, clip_grad_value_
 import re
 
-from ..model import Model
+from ..models import Model
 
 
 class Module(Model):
