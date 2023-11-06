@@ -335,8 +335,8 @@ class Model(object):
         raise NotImplementedError
 
 
-# class Observation(Module):
-#     def __init__(self, data, name="obs"):
-#         self.setup_serket(Observation,self).__init__(name=name, learnable=False)
-# 
-#         self.set_forward_msg(data)
+class Observation(Model):
+    def __init__(self, data, name="obs"):
+        self.setup_serket(Observation,self).__init__(name=name, learnable=False)
+
+        self.set_forward_msg(data)
