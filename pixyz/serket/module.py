@@ -9,7 +9,7 @@ from ..model import Model
 class Module(Model):
     __counter = 0
 
-    def __init__(self, name="", learnable=True)
+    def __init__(self, name="", learnable=True):
         """Set up Serket.
 
         Parameters
