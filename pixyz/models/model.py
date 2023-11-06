@@ -233,6 +233,7 @@ class Model(object):
             If True, the parameters of Serket are optimized.
 
         """
+
         self.__name = "module%03d_" % self.__counter + name
         self.__counter += 1
         self.__forward_prob = None
@@ -250,7 +251,7 @@ class Model(object):
 
         """
 
-        if not hasattr(self, "__name"):
+        if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before set_forward_msg().")
 
         self.__forward_prob = prob
@@ -264,7 +265,7 @@ class Model(object):
             Forward message
         """
 
-        if not hasattr(self, "__name"):
+        if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before get_forward_msg().")
 
         return self.__forward_prob
@@ -279,7 +280,7 @@ class Model(object):
 
         """
 
-        if not hasattr(self, "__name"):
+        if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before get_name().")
 
         return self.__name
@@ -294,7 +295,7 @@ class Model(object):
 
         """
 
-        if not hasattr(self, "__name"):
+        if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before connect().")
 
         self.__observations = obs
@@ -309,7 +310,7 @@ class Model(object):
 
         """
 
-        if not hasattr(self, "__name"):
+        if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before get_observations().")
 
         return [ np.array(o.get_forward_msg()) for o in self.__observations ]
@@ -324,7 +325,7 @@ class Model(object):
 
         """
 
-        if not hasattr(self, "__name"):
+        if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before get_backward_msg().")
 
         return self.__backward_prob
@@ -339,7 +340,7 @@ class Model(object):
 
         """
 
-        if not hasattr(self, "__name"):
+        if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before set_backward_msg().")
 
         self.__backward_prob = prob
@@ -354,7 +355,7 @@ class Model(object):
 
         """
 
-        if not hasattr(self, "__name"):
+        if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before send_backward_msgs().")
 
         for i in range(len(self.__observations)):
