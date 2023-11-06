@@ -249,6 +249,10 @@ class Model(object):
             Forward message
 
         """
+
+        if not hassttr(self, "__name"):
+            raise ValueError("Please call setup_serket() before set_forward_msg().")
+
         self.__forward_prob = prob
 
     def get_forward_msg(self):
@@ -259,6 +263,10 @@ class Model(object):
         numpy.ndarray
             Forward message
         """
+
+        if not hassttr(self, "__name"):
+            raise ValueError("Please call setup_serket() before get_forward_msg().")
+
         return self.__forward_prob
 
     def get_name(self):
@@ -270,6 +278,10 @@ class Model(object):
             Name of Serket
 
         """
+
+        if not hassttr(self, "__name"):
+            raise ValueError("Please call setup_serket() before get_name().")
+
         return self.__name
 
     def connect(self, *obs):
@@ -281,6 +293,10 @@ class Model(object):
             Observation nodes
 
         """
+
+        if not hassttr(self, "__name"):
+            raise ValueError("Please call setup_serket() before connect().")
+
         self.__observations = obs
 
     def get_observations(self):
@@ -292,6 +308,10 @@ class Model(object):
             Observation nodes
 
         """
+
+        if not hassttr(self, "__name"):
+            raise ValueError("Please call setup_serket() before get_observations().")
+
         return [ np.array(o.get_forward_msg()) for o in self.__observations ]
 
     def get_backward_msg(self):
@@ -303,6 +323,10 @@ class Model(object):
             Backward message
 
         """
+
+        if not hassttr(self, "__name"):
+            raise ValueError("Please call setup_serket() before get_backward_msg().")
+
         return self.__backward_prob
 
     def set_backward_msg(self, prob):
@@ -314,6 +338,10 @@ class Model(object):
             Backward message
 
         """
+
+        if not hassttr(self, "__name"):
+            raise ValueError("Please call setup_serket() before set_backward_msg().")
+
         self.__backward_prob = prob
 
     def send_backward_msgs(self, probs):
@@ -325,6 +353,10 @@ class Model(object):
             Backward messages
 
         """
+
+        if not hassttr(self, "__name"):
+            raise ValueError("Please call setup_serket() before send_backward_msgs().")
+
         for i in range(len(self.__observations)):
             self.__observations[i].set_backward_msg( probs[i] )
 
@@ -332,6 +364,7 @@ class Model(object):
         """Update parameters of Serket.
 
         """
+
         raise NotImplementedError
 
 
