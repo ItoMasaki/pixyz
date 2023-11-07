@@ -234,7 +234,7 @@ class Model(object):
 
         """
 
-        self.__name = "module%03d_" % self.__counter + name
+        self.__name = f"module{self.__counter:03}_" + name
         self.__counter += 1
         self.__forward_prob = None
         self.__backward_prob = None
