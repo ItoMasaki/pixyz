@@ -371,6 +371,6 @@ class Model(object):
 
 class Observation(Model):
     def __init__(self, data, name="obs"):
-        self.setup_serket(Observation,self).__init__(name=name, learnable=False)
+        self.setup_serket(Observation, self).__init__(name=name, learnable=False)
 
         self.set_forward_msg(data)
