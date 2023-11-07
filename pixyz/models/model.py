@@ -257,6 +257,9 @@ class Model(object):
         if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before set_forward_msg().")
 
+        if not isinstance(prob, np.ndarray):
+            raise ValueError("prob must be numpy.ndarray.")
+
         self.__forward_prob = prob
 
     def get_forward_msg(self):
@@ -300,6 +303,9 @@ class Model(object):
 
         if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before connect().")
+
+        for o in obs:
+            print(o.__class__)
 
         self.__observations = obs
 
@@ -346,6 +352,7 @@ class Model(object):
         if not hasattr(self, "_Model__name"):
             raise ValueError("Please call setup_serket() before set_backward_msg().")
 
+
         self.__backward_prob = prob
 
     def send_backward_msgs(self, probs):
@@ -370,10 +377,3 @@ class Model(object):
         """
 
         raise NotImplementedError
-
-
-class Observation(Model):
-    def __init__(self, data, name="obs"):
-        self.setup_serket(name=name, learnable=False)
-
-        self.set_forward_msg(data)

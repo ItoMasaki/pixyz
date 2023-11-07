@@ -1,14 +1,17 @@
-from .model import Model, Observation
+from .model import Model
 from .vae import VAE
 from .vi import VI
 from .ml import ML
 from .gan import GAN
 
+# For Serket framework
+from .observation import Observation
+
 __all__ = [
     'Model',
-    'Observation',
     'ML',
     'VAE',
     'VI',
     'GAN',
+    'Observation',
 ]
