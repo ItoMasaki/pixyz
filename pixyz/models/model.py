@@ -1,7 +1,10 @@
-from torch import optim, nn
-import torch
-from torch.nn.utils import clip_grad_norm_, clip_grad_value_
 import re
+
+import numpy as np
+
+import torch
+from torch import optim, nn
+from torch.nn.utils import clip_grad_norm_, clip_grad_value_
 
 from ..utils import tolist
 from ..distributions.distributions import Distribution
