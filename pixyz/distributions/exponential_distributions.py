@@ -1,5 +1,6 @@
 import torch
 from torch.distributions import Normal as NormalTorch
+from torch.distributions import MultivariateNormal as MultivariateNormalTorch
 from torch.distributions import Bernoulli as BernoulliTorch
 from torch.distributions import RelaxedBernoulli as RelaxedBernoulliTorch
 from torch.distributions import RelaxedOneHotCategorical as RelaxedOneHotCategoricalTorch
@@ -57,7 +58,7 @@ class MultivariateNormal(DistributionBase):
 
     @property
     def distribution_name(self):
-        return "MultivariateNormal"
+        return "MultivariateNormalTorch"
 
     @property
     def has_reparam(self):
