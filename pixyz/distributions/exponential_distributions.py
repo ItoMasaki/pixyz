@@ -45,7 +45,7 @@ class Normal(DistributionBase):
 
 class MultivariateNormal(DistributionBase):
     """Multivariate Normal distribution parameterized by :attr:`loc` and :attr:`scale`. """
-    def __init__(self, var=['x'], cond_var=[], name='p', features_shape=torch.Size(), loc=None, scale=None):
+    def __init__(self, var=['x'], cond_var=[], name='p', features_shape=torch.Size(), loc=None, covariance_matrix=None):
         super().__init__(var, cond_var, name, features_shape, **_valid_param_dict({'loc': loc, 'covariance_matrix': covariance_matrix}))
 
     @property
