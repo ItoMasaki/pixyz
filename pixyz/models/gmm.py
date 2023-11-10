@@ -1,7 +1,7 @@
-import ..distributions as dists
 from .model import Model
 from ..losses import ELBO
 from ..utils import epsilon
+from ..distributions import _Normal, _Categorical, MixtureModel
 
 import numpy as np
 
