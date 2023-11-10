@@ -1,7 +1,7 @@
 from .model import Model
 from ..losses import ELBO
 from ..utils import epsilon
-from ..distributions import _Normal, _Categorical, MixtureModel
+from ..distributions import Normal as _Normal, Categorical as _Categorical, MixtureModel
 
 import numpy as np
 
@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 
 
-class Normal(dists.Normal):
+class Normal(_Normal):
     def __init__(self, input_dim, name="p"):
         super().__init__(var=["x"], name=name)
 
@@ -23,7 +23,7 @@ class Normal(dists.Normal):
         return torch.log(1 + torch.exp(x))
 
 
-class Categorical(dists.Categorical):
+class Categorical(_Categorical):
     def __init__(self, latent_dim, name="p"):
         super().__init__(var=["z"], name=name)
 
