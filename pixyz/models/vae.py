@@ -1,5 +1,7 @@
+import torch
 from torch import optim
 
+from ..losses import KullbackLeibler
 from ..models.model import Model
 from ..utils import tolist
 
@@ -16,13 +18,11 @@ class VAE(Model):
     ----------
     [Kingma+ 2013] Auto-Encoding Variational Bayes
     """
-    def __init__(self, encoder, decoder,
-                 other_distributions=[],
-                 regularizer=None,
+    def __init__(self, encoder, decoder, prior=None,
                  optimizer=optim.Adam,
                  optimizer_params={},
                  clip_grad_norm=None,
-                 clip_grad_value=None):
+                 clip_grad_value=None,):
         """
         Parameters
         ----------
@@ -30,8 +30,8 @@ class VAE(Model):
             Encoder distribution.
         decoder : torch.distributions.Distribution
             Decoder distribution.
-        regularizer : torch.losses.Loss, defaults to None
-            If you want to add additional terms to the loss, set them to this argument.
+        prior : torch.distributions.Distribution
+            Prior distribution.
         optimizer : torch.optim
             Optimization algorithm.
         optimizer_params : dict
@@ -43,10 +43,14 @@ class VAE(Model):
         """
 
         # set distributions (for training)
-        distributions = [encoder, decoder] + tolist(other_distributions)
+        distributions = [encoder, decoder, prior]
 
         # set losses
         reconstruction = -decoder.log_prob().expectation(encoder)
+
+        # set regularizer
+        regularizer = None if prior is None else KullbackLeibler(encoder, prior)
+
         loss = (reconstruction + regularizer).mean()
 
         super().__init__(loss, test_loss=loss,
@@ -54,8 +58,53 @@ class VAE(Model):
                          optimizer=optimizer, optimizer_params=optimizer_params,
                          clip_grad_norm=clip_grad_norm, clip_grad_value=clip_grad_value)
 
+        self.encoder = encoder
+        self.decoder = decoder
+        self.prior = prior
+
     def train(self, train_x_dict={}, **kwargs):
         return super().train(train_x_dict, **kwargs)
 
     def test(self, test_x_dict={}, **kwargs):
         return super().test(test_x_dict, **kwargs)
+
+    def update(self, **kwargs):
+
+        # Recieve the message
+        data = self.get_observations()
+        mu_prior = self.get_backward_msg() # P(z|x)
+
+
+        # If mu_prior is not calculated yet
+        if mu_prior is None:
+            mu_prior = torch.zeros(self.kwargs["batch_size"], self.kwargs["latent_dim"])
+        else:
+            mu_prior = torch.Tensor(mu_prior)
+        self.prior.loc = mu_prior
+
+
+        # Create a dataset
+        dataset = torch.utils.data.TensorDataset(torch.Tensor(data[0]), torch.Tensor(data[0]))
+        loader = torch.utils.data.DataLoader(dataset, batch_size=self.kwargs["batch_size"], shuffle=True)
+
+
+        # Train the model for self.__epoch times
+        for _ in range(self.kwargs["epoch"]):
+            for x, _ in loader:
+                input_dict = {"x": x, "beta": self.kwargs["KL_param"]}
+                loss = self.train(input_dict, **kwargs)
+
+
+        # Sampling
+        z = self.encoder.sample({"x": torch.Tensor(data[0])})["z"]
+        x = self.decoder.sample({"z": z})["x"]
+        z = z.detach().cpu().numpy()
+        x = x.detach().cpu().numpy()
+
+
+        # Pass the message
+        self.set_forward_msg(z)
+        self.send_backward_msgs([x])
+
+
+        return loss

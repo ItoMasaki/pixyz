@@ -42,6 +42,28 @@ class Normal(DistributionBase):
         return True
 
 
+class MultivariateNormal(DistributionBase):
+    """Multivariate Normal distribution parameterized by :attr:`loc` and :attr:`scale`. """
+    def __init__(self, var=['x'], cond_var=[], name='p', features_shape=torch.Size(), loc=None, scale=None):
+        super().__init__(var, cond_var, name, features_shape, **_valid_param_dict({'loc': loc, 'scale': scale}))
+
+    @property
+    def params_keys(self):
+        return ["loc", "scale"]
+
+    @property
+    def distribution_torch_class(self):
+        return MultivariateNormalTorch
+
+    @property
+    def distribution_name(self):
+        return "MultivariateNormal"
+
+    @property
+    def has_reparam(self):
+        return True
+
+
 class BernoulliTorchOld(BernoulliTorch):
     def log_prob(self, value):
         logits, value = broadcast_all(self.logits, value)

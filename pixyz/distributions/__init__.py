@@ -1,5 +1,6 @@
 from .exponential_distributions import (
     Normal,
+    MultivariateNormal,
     Bernoulli,
     RelaxedBernoulli,
     FactorizedBernoulli,
@@ -40,6 +41,7 @@ __all__ = [
     'Deterministic',
     'EmpiricalDistribution',
     'Normal',
+    'MultivariateNormal',
     'Bernoulli',
     'RelaxedBernoulli',
     'FactorizedBernoulli',

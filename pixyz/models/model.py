@@ -225,7 +225,7 @@ class Model(object):
         checkpoint = torch.load(path)
         self.distributions.load_state_dict(checkpoint['distributions'])
 
-    def setup_serket(self, name="", learnable=True):
+    def setup_serket(self, name="", learnable=True, **kwargs):
         """Set up Serket.
 
         Parameters
@@ -237,12 +237,13 @@ class Model(object):
 
         """
 
-        self.__name = f"module{self.__counter:03}_" + name
+        self.__name = f"module_{self.__counter:03}_" + name
         self.__counter += 1
         self.__forward_prob = None
         self.__backward_prob = None
         self.__learnable = learnable
         self.__observations = None
+        self.kwargs = kwargs
 
     def set_forward_msg(self, prob):
         """Set forward message.
@@ -305,7 +306,8 @@ class Model(object):
             raise ValueError("Please call setup_serket() before connect().")
 
         for o in obs:
-            print(o.__class__)
+            if not hasattr(o, "_Model__name"):
+                raise Exception("Please input Observation or Serket models.")
 
         self.__observations = obs
 

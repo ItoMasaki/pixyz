@@ -1,5 +1,6 @@
 from .model import Model
 from .vae import VAE
+from .gmm import GMM
 from .vi import VI
 from .ml import ML
 from .gan import GAN
@@ -14,4 +15,5 @@ __all__ = [
     'VI',
     'GAN',
     'Observation',
+    'GMM',
 ]
