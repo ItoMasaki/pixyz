@@ -89,6 +89,7 @@ class VAE(Model):
             mu_prior = torch.zeros(N, self.latent_dim)
         else:
             mu_prior = torch.from_numpy(np.array(mu_prior))
+            mu_prior = torch.zeros(N, self.latent_dim)
 
 
         # Create a dataset
