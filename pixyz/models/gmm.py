@@ -9,87 +9,46 @@ import torch
 import torch.nn as nn
 
 
-class Normal(_Normal):
-    def __init__(self, input_dim, name="p"):
-        super().__init__(var=["x"], name=name)
-
-        self.loc = nn.Parameter(torch.randn(input_dim))
-        self.scale = nn.Parameter(torch.randn(input_dim))
-
-    def forward(self):
-        return {"loc": self.loc, "scale": self.softplus(self.scale)}
-
-    def softplus(self, x):
-        return torch.log(1 + torch.exp(x))
-
-
-class Categorical(_Categorical):
-    def __init__(self, latent_dim, name="p"):
-        super().__init__(var=["z"], name=name)
-
-        self.probs = nn.Parameter(torch.randn(latent_dim))
-
-    def forward(self):
-        return {"probs": self.sigmoid(self.probs)}
-
-    def sigmoid(self, x):
-        return 1 / (1 + torch.exp(-x))
-
-
 class GMM(Model):
-    def __init__(self, latent_dim, input_dim, **kwargs):
+    def __init__(self, mixture_model, approximate_posterior
+                 optimizer=optim.Adam,
+                 optimizer_params={},
+                 clip_grad_norm=None,
+                 clip_grad_value=None):
+        """
+        Parameters
+        ----------
+        mixture_model : MixtureModel
+            Mixture model.
+        approximate_posterior : Distribution
+            Approximate posterior.
+        optimizer : torch.optim
+            Optimization algorithm.
+        optimizer_params : dict
+            Parameters of optimizer
+        clip_grad_norm : float
+            Maximum allowed norm of the gradients.
+        clip_grad_value : float
+            Maximum allowed value of the gradients.
+        """
 
-        distributions = []
-        for i in range(latent_dim):
-            distributions.append(Normal(input_dim, name="p_%d" %i))
+        self.p = mixture_model
+        self.appx_post = approximate_posterior
+        distributions = [self.p, self.appx_post]
 
-        prior = Categorical(latent_dim, name="p_{prior}")
+        loss = -ELBO(self.p, self.appx_post).mean()
 
-        self.p = MixtureModel(distributions=distributions, prior=prior)
-        self.post = self.p.posterior()
+        super().__init__(loss=loss, test_loss=loss,
+                         distributions=distributions,
+                         optimizer=optimizer, optimizer_params=optimizer_params,
+                         clip_grad_norm=clip_grad_norm, clip_grad_value=clip_grad_value,
+                         retain_graph=True)
 
-        self.latent_dim = latent_dim
+    def train(self, train_x_dict={}, **kwargs):
+        return super().train(train_x_dict, **kwargs)
 
-        loss = ELBO(self.p, self.post)
-
-        super().__init__(loss=loss, **kwargs)
-
-    # def train(self, samples_dict):
-    #     samples = samples_dict["x"]
-
-    #     # E-step
-    #     posterior = self.post.prob().eval(samples_dict)
-
-    #     # M-step
-    #     N_k = posterior.sum(dim=1) + epsilon()  # (n_mix,)
-
-    #     # update probs
-    #     probs = N_k / N_k.sum()  # (n_mix,)
-    #     self.p.prior.probs = probs
-
-    #     # update loc & scale
-    #     loc = (posterior[:, None] @ samples[None]).squeeze(1)  # (n_mix, n_dim)
-    #     loc /= (N_k[:, None] + epsilon())
-
-    #     cov = (samples[None, :, :] - loc[:, None, :]) ** 2  # Covariances are set to 0.
-    #     var = (posterior[:, None, :] @ cov).squeeze(1)  # (n_mix, n_dim)
-    #     var /= (N_k[:, None])
-    #     scale = var.sqrt() + epsilon()
-
-    #     for i, d in enumerate(self.p.distributions):
-    #         d.loc[0] = loc[i]
-    #         d.scale[0] = scale[i]
-
-    #     loss = self.p.log_prob().mean().eval(samples_dict).mean()
-
-    #     return loss
-
-    def test(self, samples_dict):
-        samples = samples_dict["x"]
-
-        loss = self.p.log_prob().eval(samples_dict).mean()
-
-        return loss
+    def test(self, test_x_dict={}, **kwargs):
+        return super().test(test_x_dict, **kwargs)
 
     def update(self):
         data = self.get_observations()

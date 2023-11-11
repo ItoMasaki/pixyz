@@ -22,7 +22,7 @@ class VAE(Model):
                  optimizer=optim.Adam,
                  optimizer_params={},
                  clip_grad_norm=None,
-                 clip_grad_value=None,):
+                 clip_grad_value=None):
         """
         Parameters
         ----------
