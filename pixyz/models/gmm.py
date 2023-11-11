@@ -61,21 +61,22 @@ class GMM(Model):
         data = self.get_observations()
         Pdz = self.get_backward_msg() # P(z|d)
 
+
         N = len(data[0])  # データ数
+
 
         # backward messageがまだ計算されていないときは一様分布にする
         if Pdz is None:
             Pdz = np.ones((N, self.latent_dim))/self.latent_dim
 
-        # Create a dataset
-        dataset = torch.utils.data.TensorDataset(torch.Tensor(data[0]), torch.Tensor(data[0]))
-        loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True, drop_last=True)
+        
+        self.p.prior.probs = torch.from_numpy(Pdz)
 
+        
         # GMM学習
         for _ in range(self.epoch):
-            # for x, _ in loader:
-            input_dict = {"x": torch.Tensor(data[0])}
-            loss = self.train(input_dict)
+            loss = self.train({"x": torch.Tensor(data[0])})
+
 
         # Passing the message
         Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().cpu().numpy() # P(z|d)
@@ -86,5 +87,6 @@ class GMM(Model):
         # メッセージの送信
         self.set_forward_msg(Pdz)
         self.send_backward_msgs([mu])
+
 
         return loss
