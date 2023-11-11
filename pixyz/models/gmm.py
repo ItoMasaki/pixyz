@@ -34,6 +34,7 @@ class GMM(Model):
         """
 
         self.p = mixture_model
+        self.post = self.p.posterior()
         self.appx_post = approximate_posterior
         distributions = [self.p, self.appx_post]
 
@@ -75,12 +76,10 @@ class GMM(Model):
             for x, _ in loader:
                 input_dict = {"x": x}
                 loss = self.train(input_dict)
-                print(loss)
 
         mu = [self.p.distributions[i].loc[0].detach().numpy() for i in range(len(self.p.distributions))]
 
         Pdz = self.post.prob().eval(input_dict).detach().numpy()
-        print(Pdz.shape)
         Pdz = (Pdz.T / np.sum(Pdz, 1)).T
         
         # self.__n += 1
