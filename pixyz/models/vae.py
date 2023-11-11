@@ -84,7 +84,7 @@ class VAE(Model):
 
 
         # Create a dataset
-        dataset = torch.utils.data.TensorDataset(torch.from_numpy(data), torch.from_numpy(data))
+        dataset = torch.utils.data.TensorDataset(torch.from_numpy(data[0]), torch.from_numpy(data[0]))
         loader = torch.utils.data.DataLoader(dataset, batch_size=self.kwargs["batch_size"], shuffle=True)
 
 
