@@ -78,6 +78,7 @@ class GMM(Model):
                 loss = self.train(input_dict)
 
         mu = [self.p.distributions[i].loc[0].detach().numpy() for i in range(len(self.p.distributions))]
+        print(len(mu))
 
         Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().numpy()
         Pdz = (Pdz / np.sum(Pdz, 0))
