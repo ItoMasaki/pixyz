@@ -10,7 +10,7 @@ import torch.nn as nn
 
 
 class GMM(Model):
-    def __init__(self, mixture_model, approximate_posterior
+    def __init__(self, mixture_model, approximate_posterior,
                  optimizer=optim.Adam,
                  optimizer_params={},
                  clip_grad_norm=None,
