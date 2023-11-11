@@ -245,6 +245,14 @@ class Model(object):
         self.__observations = None
         self.kwargs = kwargs
 
+        self.check_parameters()
+
+    def check_parameters(self):
+        """Check parameters.
+
+        """
+        raise NotImplementedError
+
     def set_forward_msg(self, prob):
         """Set forward message.
 

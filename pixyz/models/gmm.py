@@ -52,6 +52,11 @@ class GMM(Model):
     def test(self, test_x_dict={}, **kwargs):
         return super().test(test_x_dict, **kwargs)
 
+    def check_parameters(self):
+        self.batch_size = self.kwargs["batch_size"]
+        self.epoch      = self.kwargs["epoch"]
+        self.latent_dim = self.kwargs["latent_dim"]
+
     def update(self):
         data = self.get_observations()
         Pdz = self.get_backward_msg() # P(z|d)
@@ -60,19 +65,14 @@ class GMM(Model):
 
         # backward messageがまだ計算されていないときは一様分布にする
         if Pdz is None:
-            Pdz = np.ones((N, self.kwargs["latent_dim"]))/self.kwargs["latent_dim"]
+            Pdz = np.ones((N, self.latent_dim))/self.latent_dim
 
         # Create a dataset
         dataset = torch.utils.data.TensorDataset(torch.Tensor(data[0]), torch.Tensor(data[0]))
-        loader = torch.utils.data.DataLoader(dataset, batch_size=self.kwargs["batch_size"], shuffle=True, drop_last=True)
-
-        # if self.__load_dir is None:
-        #     save_dir = os.path.join( self.get_name(), "%03d" % self.__n )
-        # else:
-        #     save_dir = os.path.join( self.get_name(), "recog" )
+        loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True, drop_last=True)
 
         # GMM学習
-        for _ in range(self.kwargs["epoch"]):
+        for _ in range(self.epoch):
             for x, _ in loader:
                 input_dict = {"x": x}
                 loss = self.train(input_dict)
