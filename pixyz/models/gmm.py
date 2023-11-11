@@ -67,7 +67,7 @@ class GMM(Model):
 
         # backward messageがまだ計算されていないときは一様分布にする
         if Pdz is None:
-            Pdz = np.ones((N, self.latent_dim))/self.latent_dim
+            Pdz = np.ones((N, self.latent_dim), dtype=np.float32)/self.latent_dim
 
         
         self.p.prior.probs = torch.from_numpy(Pdz)
