@@ -77,11 +77,15 @@ class GMM(Model):
                 input_dict = {"x": x}
                 loss = self.train(input_dict)
 
+        # Passing the message
+        Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().numpy()
+        Pdz = (Pdz / np.sum(Pdz, 0))
+
+        argmax = np.argmax(Pdz, 1)
+        print(argmax)
         mu = [self.p.distributions[i].loc[0].detach().numpy() for i in range(len(self.p.distributions))]
         print(len(mu))
 
-        Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().numpy()
-        Pdz = (Pdz / np.sum(Pdz, 0))
         
         # self.__n += 1
 
