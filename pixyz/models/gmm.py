@@ -81,8 +81,9 @@ class GMM(Model):
 
         Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().numpy()
         print(Pdz.T)
+        print(Pdz.T.shape)
         print(np.sum(Pdz, 1))
-        print(Pdz.shape)
+        print(np.sum(Pdz, 1).shape)
         Pdz = (Pdz.T / np.sum(Pdz, 1)).T
         
         # self.__n += 1
