@@ -85,8 +85,7 @@ class VAE(Model):
         if mu_prior is None:
             mu_prior = torch.zeros(self.batch_size, self.latent_dim)
         else:
-            print(mu_prior[0])
-            mu_prior = torch.Tensor(mu_prior)
+            mu_prior = torch.Tensor(np.array(mu_prior))
         self.prior.loc = mu_prior
 
 
@@ -98,6 +97,7 @@ class VAE(Model):
         # Train the model for self.__epoch times
         for _ in range(self.epoch):
             for x, _ in loader:
+                print(x.shape)
                 input_dict = {"x": x, "beta": self.KL_param}
                 loss = self.train(input_dict, **kwargs)
 
