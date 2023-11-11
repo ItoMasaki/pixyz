@@ -91,6 +91,7 @@ class VAE(Model):
             mu_prior = torch.from_numpy(np.array(mu_prior))
             mu_prior = torch.zeros(N, self.latent_dim)
 
+        print(np.array(mu_prior))
 
         # Create a dataset
         dataset = torch.utils.data.TensorDataset(torch.from_numpy(data[0]), mu_prior)
