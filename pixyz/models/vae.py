@@ -73,7 +73,6 @@ class VAE(Model):
         # Recieve the message
         data = self.get_observations()
         mu_prior = self.get_backward_msg() # P(z|x)
-        print(mu_prior.shape)
 
 
         # If mu_prior is not calculated yet
@@ -82,6 +81,7 @@ class VAE(Model):
             mu_prior = torch.zeros(1, self.kwargs["latent_dim"])
         else:
             mu_prior = torch.Tensor(mu_prior)
+        print(mu_prior.shape)
         self.prior.loc = mu_prior
 
 
