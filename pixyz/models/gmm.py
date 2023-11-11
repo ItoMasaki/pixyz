@@ -70,7 +70,7 @@ class GMM(Model):
             Pdz = np.ones((N, self.latent_dim), dtype=np.float32)/self.latent_dim
 
         
-        self.p.prior.probs = torch.from_numpy(Pdz)
+        self.p.prior.probs = nn.Parameter(torch.from_numpy(Pdz))
 
         
         # GMM学習
