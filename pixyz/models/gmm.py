@@ -79,7 +79,7 @@ class GMM(Model):
 
         mu = [self.p.distributions[i].loc[0].detach().numpy() for i in range(len(self.p.distributions))]
 
-        Pdz = self.post.prob().eval(input_dict).detach().numpy()
+        Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().numpy()
         Pdz = (Pdz.T / np.sum(Pdz, 1)).T
         
         # self.__n += 1
@@ -87,3 +87,5 @@ class GMM(Model):
         # メッセージの送信
         self.set_forward_msg(Pdz)
         self.send_backward_msgs([mu])
+
+        return loss
