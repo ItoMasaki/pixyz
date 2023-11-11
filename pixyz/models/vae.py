@@ -82,10 +82,11 @@ class VAE(Model):
         data = self.get_observations()
         mu_prior = self.get_backward_msg() # P(z|x)
 
+        N = len(data[0])
 
         # If mu_prior is not calculated yet
         if mu_prior is None:
-            mu_prior = torch.zeros(self.batch_size, self.latent_dim)
+            mu_prior = torch.zeros(N, self.latent_dim)
         else:
             mu_prior = torch.Tensor(np.array(mu_prior))
 
