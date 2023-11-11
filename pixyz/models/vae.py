@@ -88,7 +88,7 @@ class VAE(Model):
         if mu_prior is None:
             mu_prior = torch.zeros(N, self.latent_dim)
         else:
-            mu_prior = torch.Tensor(np.array(mu_prior))
+            mu_prior = torch.from_numpy(np.array(mu_prior))
 
 
         # Create a dataset
@@ -102,6 +102,7 @@ class VAE(Model):
                 self.prior.loc = prior
                 input_dict = {"x": x, "beta": self.KL_param}
                 loss = self.train(input_dict, **kwargs)
+                print(loss.item())
 
 
         # Sampling
