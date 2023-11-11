@@ -80,7 +80,8 @@ class GMM(Model):
         # Passing the message
         Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().cpu().numpy() # P(z|d)
         Pdz = (Pdz / np.sum(Pdz, 0))
-        mu = [self.p.distributions[idx].sample()["x"].detach().cpu().numpy() for idx in np.argmax(Pdz, 0)] # P(d|z)
+        # mu = [self.p.distributions[idx].sample()["x"].detach().cpu().numpy() for idx in np.argmax(Pdz, 0)] # P(d|z)
+        mu = [self.p.distributions[idx].loc.detach().cpu().numpy() for idx in np.argmax(Pdz, 0)] # P(d|z)
         
         # self.__n += 1
 
