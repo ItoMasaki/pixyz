@@ -64,7 +64,7 @@ class GMM(Model):
 
         # Create a dataset
         dataset = torch.utils.data.TensorDataset(torch.Tensor(data[0]), torch.Tensor(data[0]))
-        loader = torch.utils.data.DataLoader(dataset, batch_size=self.kwargs["batch_size"], shuffle=True)
+        loader = torch.utils.data.DataLoader(dataset, batch_size=self.kwargs["batch_size"], shuffle=True, drop_last=True)
 
         # if self.__load_dir is None:
         #     save_dir = os.path.join( self.get_name(), "%03d" % self.__n )
@@ -81,7 +81,6 @@ class GMM(Model):
         Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().numpy() # P(z|d)
         Pdz = (Pdz / np.sum(Pdz, 0))
         mu = [self.p.distributions[idx].sample()["x"] for idx in np.argmax(Pdz, 0)] # P(d|z)
-        print(mu)
         
         # self.__n += 1
 
