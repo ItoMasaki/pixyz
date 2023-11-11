@@ -80,7 +80,8 @@ class GMM(Model):
         mu = [self.p.distributions[i].loc[0].detach().numpy() for i in range(len(self.p.distributions))]
 
         Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().numpy()
-        print(Pdz)
+        print(Pdz.T)
+        print(np.sum(Pdz, 1))
         print(Pdz.shape)
         Pdz = (Pdz.T / np.sum(Pdz, 1)).T
         
