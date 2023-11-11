@@ -88,17 +88,17 @@ class VAE(Model):
             mu_prior = torch.zeros(self.batch_size, self.latent_dim)
         else:
             mu_prior = torch.Tensor(np.array(mu_prior))
-        self.prior.loc = mu_prior
 
 
         # Create a dataset
-        dataset = torch.utils.data.TensorDataset(torch.from_numpy(data[0]), torch.from_numpy(data[0]))
+        dataset = torch.utils.data.TensorDataset(torch.from_numpy(data[0]), mu_prior)
         loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True, drop_last=True)
 
 
         # Train the model for self.__epoch times
         for _ in range(self.epoch):
-            for x, _ in loader:
+            for x, prior in loader:
+                self.prior.loc = prior
                 print(x.shape)
                 input_dict = {"x": x, "beta": self.KL_param}
                 loss = self.train(input_dict, **kwargs)
