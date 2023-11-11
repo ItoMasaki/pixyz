@@ -100,6 +100,7 @@ class VAE(Model):
         for _ in range(self.epoch):
             for x, prior in loader:
                 self.prior.loc = prior
+                print(self.prior.loc)
                 input_dict = {"x": x, "beta": self.KL_param}
                 loss = self.train(input_dict, **kwargs)
                 print(loss.item())
