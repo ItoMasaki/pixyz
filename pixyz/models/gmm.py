@@ -81,7 +81,7 @@ class GMM(Model):
         Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().numpy() # P(z|d)
         Pdz = (Pdz / np.sum(Pdz, 0))
         # mu = [self.p.distributions[idx].loc[0].detach().numpy() for idx in np.argmax(Pdz, 0)]
-        mu = [self.p.distributions[idx].sample() for idx in np.argmax(Pdz, 0)] # P(d|z)
+        mu = [self.p.distributions[idx].sample()["x"] for idx in np.argmax(Pdz, 0)] # P(d|z)
         
         # self.__n += 1
 
