@@ -68,6 +68,12 @@ class VAE(Model):
     def test(self, test_x_dict={}, **kwargs):
         return super().test(test_x_dict, **kwargs)
 
+    def check_parameters(self):
+        self.batch_size = self.kwargs["batch_size"]
+        self.epoch = self.kwargs["epoch"]
+        self.latent_dim = self.kwargs["latent_dim"]
+        self.KL_param = self.kwargs["KL_param"]
+
     def update(self, **kwargs):
 
         # Recieve the message
@@ -77,8 +83,7 @@ class VAE(Model):
 
         # If mu_prior is not calculated yet
         if mu_prior is None:
-            mu_prior = torch.zeros(self.kwargs["batch_size"], self.kwargs["latent_dim"])
-            # mu_prior = torch.zeros(1, self.kwargs["latent_dim"])
+            mu_prior = torch.zeros(self.batch_size, self.latent_dim)
         else:
             print(mu_prior)
             mu_prior = torch.Tensor(mu_prior)
@@ -87,13 +92,13 @@ class VAE(Model):
 
         # Create a dataset
         dataset = torch.utils.data.TensorDataset(torch.from_numpy(data[0]), torch.from_numpy(data[0]))
-        loader = torch.utils.data.DataLoader(dataset, batch_size=self.kwargs["batch_size"], shuffle=True, drop_last=True)
+        loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True, drop_last=True)
 
 
         # Train the model for self.__epoch times
-        for _ in range(self.kwargs["epoch"]):
+        for _ in range(self.epoch):
             for x, _ in loader:
-                input_dict = {"x": x, "beta": self.kwargs["KL_param"]}
+                input_dict = {"x": x, "beta": self.KL_param}
                 loss = self.train(input_dict, **kwargs)
 
 
