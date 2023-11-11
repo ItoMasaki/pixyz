@@ -86,7 +86,7 @@ class GMM(Model):
         print(np.sum(Pdz, 1).shape)
         print(np.sum(Pdz, 0))
         print(np.sum(Pdz, 0).shape)
-        Pdz = (Pdz.T / np.sum(Pdz, 0)).T
+        Pdz = (Pdz / np.sum(Pdz, 0)).T
         
         # self.__n += 1
 
