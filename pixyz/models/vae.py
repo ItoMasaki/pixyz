@@ -85,7 +85,7 @@ class VAE(Model):
         if mu_prior is None:
             mu_prior = torch.zeros(self.batch_size, self.latent_dim)
         else:
-            print(mu_prior)
+            print(mu_prior[0])
             mu_prior = torch.Tensor(mu_prior)
         self.prior.loc = mu_prior
 
