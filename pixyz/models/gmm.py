@@ -53,7 +53,6 @@ class GMM(Model):
         return super().test(test_x_dict, **kwargs)
 
     def check_parameters(self):
-        self.batch_size = self.kwargs["batch_size"]
         self.epoch      = self.kwargs["epoch"]
         self.latent_dim = self.kwargs["latent_dim"]
 
