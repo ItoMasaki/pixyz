@@ -59,7 +59,7 @@ class GMM(Model):
 
         # backward messageがまだ計算されていないときは一様分布にする
         if Pdz is None:
-            Pdz = np.ones((N, self.latent_dim))/self.latent_dim
+            Pdz = np.ones((N, self.kwargs["latent_dim"]))/self.kwargs["latent_dim"]
 
         # Create a dataset
         dataset = torch.utils.data.TensorDataset(torch.Tensor(data[0]), torch.Tensor(data[0]))
