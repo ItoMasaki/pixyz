@@ -73,6 +73,7 @@ class VAE(Model):
         # Recieve the message
         data = self.get_observations()
         mu_prior = self.get_backward_msg() # P(z|x)
+        print(mu_prior.shape)
 
 
         # If mu_prior is not calculated yet
