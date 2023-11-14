@@ -1,6 +1,3 @@
-import numpy as np
-
-import torch
 from torch import optim
 
 from ..losses import KullbackLeibler
@@ -60,64 +57,8 @@ class VAE(Model):
                          optimizer=optimizer, optimizer_params=optimizer_params,
                          clip_grad_norm=clip_grad_norm, clip_grad_value=clip_grad_value)
 
-        self.encoder = encoder
-        self.decoder = decoder
-        self.prior = prior
-
     def train(self, train_x_dict={}, **kwargs):
         return super().train(train_x_dict, **kwargs)
 
     def test(self, test_x_dict={}, **kwargs):
         return super().test(test_x_dict, **kwargs)
-
-    def check_parameters(self):
-        self.batch_size = self.kwargs["batch_size"]
-        self.epoch = self.kwargs["epoch"]
-        self.latent_dim = self.kwargs["latent_dim"]
-        self.KL_param = self.kwargs["KL_param"]
-
-    def update(self, **kwargs):
-
-        # Recieve the message
-        data = self.get_observations()
-        mu_prior = self.get_backward_msg() # P(z|x)
-
-        N = len(data[0])
-
-        # If mu_prior is not calculated yet
-        if mu_prior is None:
-            mu_prior = torch.zeros(N, self.latent_dim)
-        else:
-            mu_prior = torch.from_numpy(np.array(mu_prior))
-            mu_prior = torch.zeros(N, self.latent_dim)
-
-        print(np.array(mu_prior))
-
-        # Create a dataset
-        dataset = torch.utils.data.TensorDataset(torch.from_numpy(data[0]), mu_prior)
-        loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True, drop_last=True)
-
-
-        # Train the model for self.__epoch times
-        for _ in range(self.epoch):
-            for x, prior in loader:
-                self.prior.loc = prior
-                print(self.prior.loc)
-                input_dict = {"x": x, "beta": self.KL_param}
-                loss = self.train(input_dict, **kwargs)
-                print(loss.item())
-
-
-        # Sampling
-        z = self.encoder.sample({"x": torch.Tensor(data[0])})["z"]
-        x = self.decoder.sample({"z": z})["x"]
-        z = z.detach().cpu().numpy()
-        x = x.detach().cpu().numpy()
-
-
-        # Pass the message
-        self.set_forward_msg(z)
-        self.send_backward_msgs([x])
-
-
-        return loss

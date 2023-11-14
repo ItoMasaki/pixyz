@@ -225,7 +225,7 @@ class Model(object):
         checkpoint = torch.load(path)
         self.distributions.load_state_dict(checkpoint['distributions'])
 
-    def setup_serket(self, name="", learnable=True, **kwargs):
+    def setup_serket(self, name="", learnable=True):
         """Set up Serket.
 
         Parameters
@@ -243,15 +243,6 @@ class Model(object):
         self.__backward_prob = None
         self.__learnable = learnable
         self.__observations = None
-        self.kwargs = kwargs
-
-        self.check_parameters()
-
-    def check_parameters(self):
-        """Check parameters.
-
-        """
-        raise NotImplementedError
 
     def set_forward_msg(self, prob):
         """Set forward message.

@@ -1,13 +1,9 @@
-from .model import Model
-from ..losses import ELBO
-from ..utils import epsilon
-from ..distributions import Normal as _Normal, Categorical as _Categorical, MixtureModel
-
-import numpy as np
-
-import torch
-import torch.nn as nn
 import torch.optim as optim
+
+from ..losses import ELBO
+from ..models.model import Model
+from ..utils import tolist
+
 
 
 class GMM(Model):
@@ -51,41 +47,3 @@ class GMM(Model):
 
     def test(self, test_x_dict={}, **kwargs):
         return super().test(test_x_dict, **kwargs)
-
-    def check_parameters(self):
-        self.epoch      = self.kwargs["epoch"]
-        self.latent_dim = self.kwargs["latent_dim"]
-
-    def update(self):
-        data = self.get_observations()
-        Pdz = self.get_backward_msg() # P(z|d)
-
-
-        N = len(data[0])  # データ数
-
-
-        # backward messageがまだ計算されていないときは一様分布にする
-        if Pdz is None:
-            Pdz = np.ones((N, self.latent_dim), dtype=np.float32)/self.latent_dim
-
-        
-        self.p.prior.probs = nn.Parameter(torch.from_numpy(Pdz))
-
-        
-        # GMM学習
-        for _ in range(self.epoch):
-            loss = self.train({"x": torch.Tensor(data[0])})
-
-
-        # Passing the message
-        Pdz = self.post.prob().eval({"x": torch.Tensor(data[0])}).detach().cpu().numpy() # P(z|d)
-        Pdz = (Pdz / np.sum(Pdz, 0))
-        mu = [self.p.distributions[idx].loc.detach().cpu().numpy() for idx in np.argmax(Pdz, 0)] # P(d|z)
-        
-
-        # メッセージの送信
-        self.set_forward_msg(Pdz)
-        self.send_backward_msgs([mu])
-
-
-        return loss
