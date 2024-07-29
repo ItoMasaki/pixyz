@@ -152,14 +152,15 @@ class Model(object):
 
         """
         self.distributions.train()
-
         self.optimizer.zero_grad()
 
-        with torch.cuda.amp.autocast(enabled=self.use_amp):
+        if (kwargs["return_dict"] is not None) and (kwargs["return_dict"] == True):
+            loss, loss_dict = self.loss_cls.eval(train_x_dict, **kwargs)
+        else:
             loss = self.loss_cls.eval(train_x_dict, **kwargs)
 
         # backprop
-        self.scaler.scale(loss).backward(retain_graph=self.retain_graph)
+        loss.backward()
 
         if self.clip_norm:
             clip_grad_norm_(self.distributions.parameters(), self.clip_norm)
@@ -167,11 +168,14 @@ class Model(object):
             clip_grad_value_(self.distributions.parameters(), self.clip_value)
 
         # update params
-        self.scaler.step(self.optimizer)
+        self.optimizer.step()
 
-        self.scaler.update()
 
-        return loss
+        if (kwargs["return_dict"] is not None) and (kwargs["return_dict"] == True):
+            return loss, loss_dict
+        else:
+            return loss
+
 
     def test(self, test_x_dict={}, **kwargs):
         """Test the model.
