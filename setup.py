@@ -45,7 +45,7 @@ setup(
     ],
     extras_require={
         'dev': ['pytest',
-                'flake8==3.9.2'
+                'flake8'
                 'pytest-cov',
                 'pytest-flake8',
                 'sphinx',
@@ -56,7 +56,7 @@ setup(
                 "tensorboardX",
                 'sklearn'],
         'test': ['pytest-cov',
-                 'flake8==3.9.2',
+                 'flake8',
                  'pytest-flake8',
                  'sphinx',
                  'sphinx_rtd_theme',
