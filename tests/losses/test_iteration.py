@@ -1,6 +1,6 @@
 import torch
 from pixyz.losses import IterativeLoss, Parameter, Expectation
-from pixyz.distributions import Normal
+from pixyz.distributions import Deterministic, Normal
 
 
 class TestIterativeLoss:
@@ -29,3 +29,18 @@ class TestIterativeLoss:
                            'w': torch.zeros(1)}, return_dict=True)[1]) == set(('w', 'x', 'y', 'z'))
         assert set(e.eval({'y': torch.zeros(1), 'x': torch.zeros(1),
                            'z': torch.zeros(1)}, return_dict=True)[1]) == set(('x', 'y', 'z'))
+
+    def test_return_dict_keeps_updated_state(self):
+        class StateTransition(Deterministic):
+            def __init__(self):
+                super().__init__(var=['h'], cond_var=['h_prev'])
+
+            def forward(self, h_prev):
+                return {'h': h_prev + 1}
+
+        transition = StateTransition()
+        step_loss = Expectation(transition, Parameter('h'))
+        itr = IterativeLoss(step_loss=step_loss, max_iter=3, update_value={'h': 'h_prev'})
+        _, return_dict = itr.eval({'h_prev': torch.tensor(0.0)}, return_dict=True)
+
+        assert return_dict['h_prev'] == torch.tensor(3.0)
