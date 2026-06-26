@@ -1,4 +1,5 @@
 from __future__ import print_function
+import math
 import torch
 import re
 import networkx as nx
@@ -165,6 +166,11 @@ class DistGraph(nn.Module):
         self.global_option = {}
         self.marginalize_list = set()
         self.name = ''
+        self._sorted_factors_cache = None
+        self._all_var_cache = None
+        self._input_var_cache = None
+        self._cond_var_cache = None
+        self._var_cache = None
         if original:
             self._override_module(original)
             self.graph = nx.relabel_nodes(original.graph,
@@ -172,6 +178,13 @@ class DistGraph(nn.Module):
             self.global_option.update(original.global_option)
             self.marginalize_list.update(original.marginalize_list)
             self.name = original.name
+
+    def _clear_caches(self):
+        self._sorted_factors_cache = None
+        self._all_var_cache = None
+        self._input_var_cache = None
+        self._cond_var_cache = None
+        self._var_cache = None
 
     def _override_module(self, original: nn.Module):
         name_offset = len(list(self.named_children()))
@@ -202,6 +215,7 @@ class DistGraph(nn.Module):
             new_instance.graph.add_edge(factor, var_name)
         for cond in atom_dist.cond_var:
             new_instance.graph.add_edge(cond, factor)
+        new_instance._clear_caches()
         return new_instance
 
     def set_option(self, option_dict, var=[]):
@@ -239,6 +253,7 @@ class DistGraph(nn.Module):
         scg.graph.update(other.graph)
         scg.global_option.update(other.global_option)
         scg.marginalize_list.update(other.marginalize_list)
+        scg._clear_caches()
         return scg
 
     def marginalized(self, marginalize_list):
@@ -275,6 +290,7 @@ class DistGraph(nn.Module):
 
         new_graph = DistGraph(self)
         new_graph.marginalize_list.update(marginalize_list)
+        new_graph._clear_caches()
         return new_graph
 
     def var_replaced(self, replace_dict):
@@ -371,6 +387,7 @@ class DistGraph(nn.Module):
             if set(replace_dict.values()).isdisjoint(list(result.graph.pred[factor]) + list(result.graph.succ[factor])):
                 continue
             factor.rename_var(replace_dict)
+        result._clear_caches()
         return result
 
     def _factors_from_variable(self, var_name):
@@ -388,7 +405,13 @@ class DistGraph(nn.Module):
         iter of Factor
 
         """
-        nodes = nx.topological_sort(self.graph) if sorted else self.graph
+        if sorted:
+            if self._sorted_factors_cache is None:
+                self._sorted_factors_cache = tuple(node for node in nx.topological_sort(self.graph)
+                                                   if isinstance(node, Factor))
+            nodes = self._sorted_factors_cache
+        else:
+            nodes = self.graph
         for node in nodes:
             if isinstance(node, Factor):
                 yield node
@@ -417,7 +440,9 @@ class DistGraph(nn.Module):
         -------
         list of str
         """
-        return [var_name for var_name in self.graph if isinstance(var_name, str)]
+        if self._all_var_cache is None:
+            self._all_var_cache = [var_name for var_name in self.graph if isinstance(var_name, str)]
+        return self._all_var_cache
 
     @property
     def input_var(self):
@@ -435,7 +460,9 @@ class DistGraph(nn.Module):
                 return True
             else:
                 return False
-        return [var_name for var_name in self.graph if is_input_var_node(var_name)]
+        if self._input_var_cache is None:
+            self._input_var_cache = [var_name for var_name in self.graph if is_input_var_node(var_name)]
+        return self._input_var_cache
 
     @property
     def cond_var(self):
@@ -444,7 +471,10 @@ class DistGraph(nn.Module):
         -------
         list of str
         """
-        return [var_name for var_name in self.graph if isinstance(var_name, str) and not self.graph.pred[var_name]]
+        if self._cond_var_cache is None:
+            self._cond_var_cache = [var_name for var_name in self.graph
+                                    if isinstance(var_name, str) and not self.graph.pred[var_name]]
+        return self._cond_var_cache
 
     @property
     def var(self):
@@ -460,7 +490,9 @@ class DistGraph(nn.Module):
                 return True
             else:
                 return False
-        return [var_name for var_name in self.graph if is_var_node(var_name)]
+        if self._var_cache is None:
+            self._var_cache = [var_name for var_name in self.graph if is_var_node(var_name)]
+        return self._var_cache
 
     def forward(self, mode, kwargs):
         if mode == 'sample':
@@ -1365,6 +1397,9 @@ class DistributionBase(Distribution):
 
         self._set_buffers(**kwargs)
         self._dist = None
+        self._buffer_keys = tuple(self._buffers.keys())
+        self._replace_param_keys = frozenset(self.replace_params_dict.keys())
+        self._constant_params_dict = get_dict_values(self._buffers, self._buffer_keys, return_dict=True)
 
     def _set_buffers(self, **params_dict):
         """Format constant parameters of this distribution as buffers.
@@ -1431,6 +1466,41 @@ class DistributionBase(Distribution):
         """Return the instance of PyTorch distribution."""
         return self._dist
 
+    def _has_custom_impl(self, method_name):
+        return getattr(type(self), method_name) is not getattr(DistributionBase, method_name)
+
+    def _validate_params(self, params):
+        if set(self.params_keys) != set(params.keys()):
+            raise ValueError(f"{type(self)} class requires following parameters: {set(self.params_keys)}\n"
+                             f"but got {set(params.keys())}")
+        return params
+
+    def _expand_dist_batch(self, batch_n):
+        if not batch_n:
+            return
+
+        batch_shape = self._dist.batch_shape
+        if batch_shape[0] == 1:
+            self._dist = self._dist.expand(torch.Size([batch_n]) + batch_shape[1:])
+        elif batch_shape[0] != batch_n:
+            raise ValueError(f"Batch shape mismatch. batch_shape from parameters: {batch_shape}\n"
+                             f" specified batch size:{batch_n}")
+
+    def _sample_from_params(self, params, batch_n=None, sample_shape=torch.Size(), reparam=False, sample_mean=False):
+        raise NotImplementedError()
+
+    def _log_prob_from_params(self, params, x_targets, sum_features=True, feature_dims=None):
+        raise NotImplementedError()
+
+    def _entropy_from_params(self, params, sum_features=True, feature_dims=None):
+        raise NotImplementedError()
+
+    def _sample_mean_from_params(self, params):
+        raise NotImplementedError()
+
+    def _sample_variance_from_params(self, params):
+        raise NotImplementedError()
+
     def set_dist(self, x_dict={}, batch_n=None, **kwargs):
         """Set :attr:`dist` as PyTorch distributions given parameters.
 
@@ -1449,23 +1519,9 @@ class DistributionBase(Distribution):
         -------
 
         """
-        params = self.get_params(x_dict, **kwargs)
-        if set(self.params_keys) != set(params.keys()):
-            raise ValueError(f"{type(self)} class requires following parameters: {set(self.params_keys)}\n"
-                             f"but got {set(params.keys())}")
-
+        params = self._validate_params(self._resolve_params(x_dict, **kwargs))
         self._dist = self.distribution_torch_class(**params)
-
-        # expand batch_n
-        if batch_n:
-            batch_shape = self._dist.batch_shape
-            if batch_shape[0] == 1:
-                self._dist = self._dist.expand(torch.Size([batch_n]) + batch_shape[1:])
-            elif batch_shape[0] == batch_n:
-                return
-            else:
-                raise ValueError(f"Batch shape mismatch. batch_shape from parameters: {batch_shape}\n"
-                                 f" specified batch size:{batch_n}")
+        self._expand_dist_batch(batch_n)
 
     def get_sample(self, reparam=False, sample_shape=torch.Size()):
         """Get a sample_shape shaped sample from :attr:`dist`.
@@ -1498,16 +1554,41 @@ class DistributionBase(Distribution):
 
     def get_log_prob(self, x_dict, sum_features=True, feature_dims=None, **kwargs):
         _x_dict = get_dict_values(x_dict, self._cond_var, return_dict=True)
-        self.set_dist(_x_dict)
-
         x_targets = get_dict_values(x_dict, self._var)
         if len(x_targets) == 0:
             raise ValueError(f"x_dict has no value of the stochastic variable. x_dict: {x_dict}")
+        params = self._validate_params(self._resolve_params(_x_dict, **kwargs))
+
+        if self._has_custom_impl("_log_prob_from_params"):
+            return self._log_prob_from_params(params, x_targets, sum_features=sum_features, feature_dims=feature_dims)
+
+        self._dist = self.distribution_torch_class(**params)
         log_prob = self.dist.log_prob(*x_targets)
         if sum_features:
             log_prob = sum_samples(log_prob, feature_dims)
-
         return log_prob
+
+    def _resolve_params(self, params_dict={}, **kwargs):
+        if type(self).get_params is DistributionBase.get_params:
+            return self._get_params_internal(params_dict, **kwargs)
+        return self.get_params(params_dict, **kwargs)
+
+    def _get_params_internal(self, params_dict={}, **kwargs):
+        replaced_params_dict = {}
+        replace_params_dict = self.replace_params_dict
+        replace_param_keys = self._replace_param_keys
+        for key, value in params_dict.items():
+            if key in replace_param_keys:
+                for replaced_key in replace_params_dict[key]:
+                    replaced_params_dict[replaced_key] = value
+
+        vars_dict = {key: value for key, value in params_dict.items() if key not in replace_param_keys}
+        output_dict = self(**vars_dict)
+
+        output_dict.update(replaced_params_dict)
+        output_dict.update(self._constant_params_dict)
+
+        return output_dict
 
     @lru_cache_for_sample_dict()
     def get_params(self, params_dict={}, **kwargs):
@@ -1556,50 +1637,44 @@ class DistributionBase(Distribution):
         {'scale': tensor(1.), 'loc': tensor([0.])}
 
         """
-        replaced_params_dict = {}
-        for key, value in params_dict.items():
-            if key in self.replace_params_dict:
-                for replaced_key in self.replace_params_dict[key]:
-                    replaced_params_dict[replaced_key] = value
-
-        vars_dict = {key: value for key, value in params_dict.items() if key not in self.replace_params_dict}
-        output_dict = self(**vars_dict)
-
-        output_dict.update(replaced_params_dict)
-
-        # append constant parameters to output_dict
-        constant_params_dict = get_dict_values(dict(self.named_buffers()), self.params_keys,
-                                               return_dict=True)
-        output_dict.update(constant_params_dict)
-
-        return output_dict
+        return self._get_params_internal(params_dict, **kwargs)
 
     def get_entropy(self, x_dict={}, sum_features=True, feature_dims=None):
         _x_dict = get_dict_values(x_dict, self._cond_var, return_dict=True)
-        self.set_dist(_x_dict)
+        params = self._validate_params(self._resolve_params(_x_dict))
 
+        if self._has_custom_impl("_entropy_from_params"):
+            return self._entropy_from_params(params, sum_features=sum_features, feature_dims=feature_dims)
+
+        self._dist = self.distribution_torch_class(**params)
         entropy = self.dist.entropy()
         if sum_features:
             entropy = sum_samples(entropy, feature_dims)
-
         return entropy
 
     def sample(self, x_dict={}, batch_n=None, sample_shape=torch.Size(), return_all=True, reparam=False,
                sample_mean=False, **kwargs):
         # check whether the input is valid or convert it to valid dictionary.
         input_dict = self._get_input_dict(x_dict)
+        params = self._validate_params(self._resolve_params(input_dict, **kwargs))
 
-        self.set_dist(input_dict, batch_n=batch_n)
-
-        if sample_mean:
-            mean = self.dist.mean
-            if sample_shape != torch.Size():
-                unsqueeze_shape = torch.Size([1] * len(sample_shape))
-                unrepeat_shape = torch.Size([1] * mean.ndim)
-                mean = mean.reshape(unsqueeze_shape + mean.shape).repeat(sample_shape + unrepeat_shape)
-            output_dict = {self._var[0]: mean}
+        if self._has_custom_impl("_sample_from_params"):
+            sample_value = self._sample_from_params(params, batch_n=batch_n, sample_shape=torch.Size(sample_shape),
+                                                    reparam=reparam, sample_mean=sample_mean)
+            output_dict = {self._var[0]: sample_value}
         else:
-            output_dict = self.get_sample(reparam=reparam, sample_shape=sample_shape)
+            self._dist = self.distribution_torch_class(**params)
+            self._expand_dist_batch(batch_n)
+
+            if sample_mean:
+                mean = self.dist.mean
+                if sample_shape != torch.Size():
+                    unsqueeze_shape = torch.Size([1] * len(sample_shape))
+                    unrepeat_shape = torch.Size([1] * mean.ndim)
+                    mean = mean.reshape(unsqueeze_shape + mean.shape).repeat(sample_shape + unrepeat_shape)
+                output_dict = {self._var[0]: mean}
+            else:
+                output_dict = self.get_sample(reparam=reparam, sample_shape=sample_shape)
 
         if return_all:
             x_dict = x_dict.copy()
@@ -1609,11 +1684,17 @@ class DistributionBase(Distribution):
         return output_dict
 
     def sample_mean(self, x_dict={}):
-        self.set_dist(x_dict)
+        params = self._validate_params(self._resolve_params(self._get_input_dict(x_dict)))
+        if self._has_custom_impl("_sample_mean_from_params"):
+            return self._sample_mean_from_params(params)
+        self._dist = self.distribution_torch_class(**params)
         return self.dist.mean
 
     def sample_variance(self, x_dict={}):
-        self.set_dist(x_dict)
+        params = self._validate_params(self._resolve_params(self._get_input_dict(x_dict)))
+        if self._has_custom_impl("_sample_variance_from_params"):
+            return self._sample_variance_from_params(params)
+        self._dist = self.distribution_torch_class(**params)
         return self.dist.variance
 
     def forward(self, **params):

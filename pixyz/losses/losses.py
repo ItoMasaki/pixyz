@@ -194,7 +194,8 @@ class Loss(torch.nn.Module, metaclass=abc.ABCMeta):
         """
         return ConstantVar(self, constant_dict)
 
-    def eval(self, x_dict={}, return_dict=False, return_all=True, **kwargs):
+    def eval(self, x_dict={}, return_dict=False, return_all=True,
+             _skip_input_check=False, _skip_dict_filter=False, **kwargs):
         """Evaluate the value of the loss function given inputs (:attr:`x_dict`).
 
         Parameters
@@ -216,11 +217,13 @@ class Loss(torch.nn.Module, metaclass=abc.ABCMeta):
 
         """
 
-        if not(set(list(x_dict.keys())) >= set(self._input_var)):
-            raise ValueError("Input keys are not valid, expected {} but got {}.".format(self._input_var,
-                                                                                        list(x_dict.keys())))
+        if not _skip_input_check:
+            missing_input = [var_name for var_name in self._input_var if var_name not in x_dict]
+            if missing_input:
+                raise ValueError("Input keys are not valid, expected {} but got {}.".format(self._input_var,
+                                                                                            list(x_dict.keys())))
 
-        input_dict = get_dict_values(x_dict, self.input_var, return_dict=True)
+        input_dict = x_dict if _skip_dict_filter else get_dict_values(x_dict, self.input_var, return_dict=True)
         loss, eval_dict = self(input_dict, **kwargs)
 
         if return_dict:
@@ -350,7 +353,8 @@ class ConstantVar(Loss):
     def forward(self, x_dict={}, **kwargs):
         input_dict = dict(x_dict)
         input_dict.update(self.constant_dict)
-        return self.base_loss.eval(input_dict, return_dict=True)
+        return self.base_loss.eval(input_dict, return_dict=True,
+                                   _skip_input_check=True, _skip_dict_filter=True)
 
     @property
     def _symbol(self):
@@ -388,13 +392,15 @@ class LossOperator(Loss):
 
     def forward(self, x_dict={}, **kwargs):
         if not isinstance(self.loss1, type(None)):
-            loss1, x1 = self.loss1.eval(x_dict, return_dict=True, return_all=False, **kwargs)
+            loss1, x1 = self.loss1.eval(x_dict, return_dict=True, return_all=False,
+                                        _skip_input_check=True, _skip_dict_filter=True, **kwargs)
         else:
             loss1 = 0
             x1 = {}
 
         if not isinstance(self.loss2, type(None)):
-            loss2, x2 = self.loss2.eval(x_dict, return_dict=True, return_all=False, **kwargs)
+            loss2, x2 = self.loss2.eval(x_dict, return_dict=True, return_all=False,
+                                        _skip_input_check=True, _skip_dict_filter=True, **kwargs)
         else:
             loss2 = 0
             x2 = {}
@@ -616,7 +622,8 @@ class NegLoss(LossSelfOperator):
         return -self.loss1._symbol
 
     def forward(self, x_dict={}, **kwargs):
-        loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False, **kwargs)
+        loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False,
+                                       _skip_input_check=True, _skip_dict_filter=True, **kwargs)
         return -loss, x_dict
 
 
@@ -645,7 +652,8 @@ class AbsLoss(LossSelfOperator):
         return sympy.Symbol("|{}|".format(self.loss1.loss_text))
 
     def forward(self, x_dict={}, **kwargs):
-        loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False, **kwargs)
+        loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False,
+                                       _skip_input_check=True, _skip_dict_filter=True, **kwargs)
         return loss.abs(), x_dict
 
 
@@ -680,7 +688,8 @@ class BatchMean(LossSelfOperator):
         return sympy.Symbol("mean \\left({} \\right)".format(self.loss1.loss_text))  # TODO: fix it
 
     def forward(self, x_dict={}, **kwargs):
-        loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False, **kwargs)
+        loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False,
+                                       _skip_input_check=True, _skip_dict_filter=True, **kwargs)
         return loss.mean(), x_dict
 
 
@@ -715,7 +724,8 @@ class BatchSum(LossSelfOperator):
         return sympy.Symbol("sum \\left({} \\right)".format(self.loss1.loss_text))  # TODO: fix it
 
     def forward(self, x_dict={}, **kwargs):
-        loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False, **kwargs)
+        loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False,
+                                       _skip_input_check=True, _skip_dict_filter=True, **kwargs)
         return loss.sum(), x_dict
 
 
@@ -730,7 +740,8 @@ class Detach(LossSelfOperator):
         return sympy.Symbol("detach \\left({} \\right)".format(self.loss1.loss_text))  # TODO: fix it?
 
     def forward(self, x_dict={}, **kwargs):
-        loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False, **kwargs)
+        loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False,
+                                       _skip_input_check=True, _skip_dict_filter=True, **kwargs)
         return loss.detach(), x_dict
 
 
@@ -793,20 +804,37 @@ class Expectation(Loss):
         return sympy.Symbol("\\mathbb{{E}}_{} \\left[{} \\right]".format(p_text, self.f.loss_text))
 
     def forward(self, x_dict={}, **kwargs):
-        samples_dicts = [self.p.sample(x_dict, reparam=self.reparam, return_all=False, **kwargs)
-                         for i in range(self.sample_shape.numel())]
-
-        loss_and_dicts = []
-        for samples_dict in samples_dicts:
+        sample_count = self.sample_shape.numel()
+        if sample_count == 1:
+            samples_dict = self.p.sample(x_dict, reparam=self.reparam, return_all=False, **kwargs)
             input_dict = x_dict.copy()
             input_dict.update(samples_dict)
-            loss_and_dicts.append(self.f.eval(input_dict, return_dict=True, return_all=False, **kwargs))
+            loss, loss_sample_dict = self.f.eval(input_dict, return_dict=True, return_all=False,
+                                                 _skip_input_check=True, _skip_dict_filter=True, **kwargs)
+            output_dict = {}
+            output_dict.update(samples_dict)
+            output_dict.update(loss_sample_dict)
+            return loss, output_dict
 
-        losses = [loss for loss, loss_sample_dict in loss_and_dicts]
-        # sum over sample_shape
+        batched_samples_dict = self.p.sample(x_dict, reparam=self.reparam, return_all=False,
+                                             sample_shape=self.sample_shape, **kwargs)
+
+        flattened_samples = {}
+        for key, value in batched_samples_dict.items():
+            flattened_samples[key] = value.reshape((sample_count,) + value.shape[len(self.sample_shape):])
+
+        loss_and_dicts = []
+        for sample_index in range(sample_count):
+            samples_dict = {key: value[sample_index] for key, value in flattened_samples.items()}
+            input_dict = x_dict.copy()
+            input_dict.update(samples_dict)
+            loss_and_dicts.append(self.f.eval(input_dict, return_dict=True, return_all=False,
+                                              _skip_input_check=True, _skip_dict_filter=True, **kwargs))
+
+        losses = [loss for loss, _ in loss_and_dicts]
         loss = torch.stack(losses).mean(dim=0)
         output_dict = {}
-        output_dict.update(samples_dicts[0])
+        output_dict.update({key: value[0] for key, value in flattened_samples.items()})
         output_dict.update(loss_and_dicts[0][1])
 
         return loss, output_dict

@@ -1,5 +1,5 @@
 import torch
-from pixyz.losses import IterativeLoss, Parameter, Expectation
+from pixyz.losses import IterativeLoss, SequentialLoss, Parameter, Expectation
 from pixyz.distributions import Deterministic, Normal
 
 
@@ -44,3 +44,15 @@ class TestIterativeLoss:
         _, return_dict = itr.eval({'h_prev': torch.tensor(0.0)}, return_dict=True)
 
         assert return_dict['h_prev'] == torch.tensor(3.0)
+
+    def test_sequence_dim(self):
+        seq = torch.arange(6, dtype=torch.float).reshape(2, 3)
+        itr = IterativeLoss(Parameter('x').sum() + Parameter('t'),
+                            timestep_var='t', series_var=['x'], series_dim=1)
+        assert itr.eval({'x': seq}) == seq[:, 0].sum() + seq[:, 1].sum() + seq[:, 2].sum() + sum(range(3))
+
+    def test_sequential_loss_alias(self):
+        seq = torch.arange(3, dtype=torch.float)
+        itr = SequentialLoss(Parameter('x') + Parameter('t'),
+                             sequence_var=['x'], time_var='t')
+        assert itr.eval({'x': seq}) == sum(seq.tolist()) + sum(range(3))

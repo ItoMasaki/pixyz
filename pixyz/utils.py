@@ -1,4 +1,5 @@
 import functools
+import warnings
 import torch
 import sympy
 from IPython.display import Math
@@ -404,3 +405,28 @@ def print_latex(obj):
 
 def convert_latex_name(name):
     return sympy.latex(sympy.Symbol(name))
+
+
+def compile_if_available(module, **kwargs):
+    """Compile a module with ``torch.compile`` when available.
+
+    Parameters
+    ----------
+    module : torch.nn.Module or callable
+        Target object to compile.
+    **kwargs
+        Keyword arguments forwarded to ``torch.compile``.
+
+    Returns
+    -------
+    compiled : same type as input
+        Compiled object when supported; otherwise the original object.
+    """
+    compile_fn = getattr(torch, "compile", None)
+    if compile_fn is None:
+        return module
+    try:
+        return compile_fn(module, **kwargs)
+    except Exception as exc:
+        warnings.warn(f"torch.compile failed, returning the original module instead: {exc}")
+        return module

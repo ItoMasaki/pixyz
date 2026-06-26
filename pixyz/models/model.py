@@ -85,15 +85,12 @@ class Model(object):
             Maximum allowed value of the gradients.
         """
 
-        # set losses
         self.loss_cls = None
         self.test_loss_cls = None
         self.set_loss(loss, test_loss)
 
-        # set distributions (for training)
         self.distributions = nn.ModuleList(tolist(distributions))
 
-        # set params and optim
         params = self.distributions.parameters()
         self.optimizer = optimizer(params, **optimizer_params)
 
@@ -144,10 +141,9 @@ class Model(object):
         """
         self.distributions.train()
 
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)
         loss = self.loss_cls.eval(train_x_dict, **kwargs)
 
-        # backprop
         loss.backward(retain_graph=self.retain_graph)
 
         if self.clip_norm:
@@ -155,7 +151,6 @@ class Model(object):
         if self.clip_value:
             clip_grad_value_(self.distributions.parameters(), self.clip_value)
 
-        # update params
         self.optimizer.step()
 
         return loss

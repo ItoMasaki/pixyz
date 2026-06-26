@@ -16,6 +16,7 @@
 - [What is Pixyz?](#what-is-pixyz)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Performance Tips](#performance-tips)
 - [More information](#more-information)
 - [Citation](#citation)
 - [Acknowledgements](#acknowledgements)
@@ -117,7 +118,7 @@ and
 ... 
 ...     def forward(self, z):  # the name of this argument should be same as cond_var.
 ...         h = F.relu(self.fc1(z))
-...         return {"probs": F.sigmoid(self.fc2(h))}    # return a parameter of the Bernoulli distribution
+...         return {"logits": self.fc2(h)}    # logits are faster and numerically more stable than probs
 ```
 Once defined, you can create instances of these classes.
 ```python
@@ -218,6 +219,14 @@ Like Distribution API, you can check the formula of the loss function by printin
 mean \left(D_{KL} \left[q(z|x)||p_{prior}(z) \right] - \mathbb{E}_{q(z|x)} \left[\log p(x|z) \right] \right) 
 ```
 ![loss](https://user-images.githubusercontent.com/11865486/59156066-3f385d80-8ad0-11e9-9604-ee78a5dd7407.png)
+
+## Performance Tips
+
+- Prefer `Bernoulli(logits=...)` or returning `{"logits": ...}` from decoders instead of `probs`.
+- Use `SequentialLoss` for recurrent objectives and set `sequence_dim` explicitly when data is not time-major.
+- Keep `sample_shape` small unless multiple Monte Carlo samples are necessary.
+- Use `pixyz.utils.compile_if_available` when running on recent PyTorch versions.
+- Track regressions with `python benchmarks/performance.py`.
 
 When evaluating this loss function given data, use the `eval` method.
 ```python

@@ -20,6 +20,7 @@ Pixyz is a library for developing deep generative models in a more concise, intu
    models
    flows
    utils
+   performance
 
 
 Indices and tables

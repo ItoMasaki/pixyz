@@ -41,6 +41,11 @@ Bernoulli
     :members:
     :undoc-members:
 
+.. note::
+   For neural decoders, prefer passing ``logits`` instead of ``probs`` when
+   possible. This avoids an extra sigmoid/logit conversion path and is the
+   preferred high-performance form in Pixyz.
+
 RelaxedBernoulli
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
        

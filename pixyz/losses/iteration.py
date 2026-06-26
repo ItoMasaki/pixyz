@@ -1,8 +1,9 @@
 from copy import deepcopy
+
 import sympy
 
 from .losses import Loss
-from ..utils import get_dict_values, replace_dict_keys
+from ..utils import get_dict_values
 
 
 class IterativeLoss(Loss):
@@ -76,18 +77,30 @@ class IterativeLoss(Loss):
     """
 
     def __init__(self, step_loss, max_iter=None,
-                 series_var=(), update_value={}, slice_step=None, timestep_var=()):
+                 series_var=(), update_value={}, slice_step=None, timestep_var=(), series_dim=0):
         super().__init__()
         self.step_loss = step_loss
         self.max_iter = max_iter
         self.update_value = update_value
-        self.timestep_var = timestep_var
-        if timestep_var:
-            self.timpstep_symbol = sympy.Symbol(self.timestep_var[0])
+        self.series_var = tuple(series_var)
+        self.series_dim = series_dim
+        self._update_pairs = tuple(update_value.items())
+        self._update_sources = tuple(update_value.keys())
+        self._update_targets = tuple(update_value.values())
+
+        if isinstance(timestep_var, str):
+            self.timestep_var = timestep_var
+        elif timestep_var:
+            self.timestep_var = timestep_var[0]
+        else:
+            self.timestep_var = None
+
+        if self.timestep_var:
+            self.timpstep_symbol = sympy.Symbol(self.timestep_var)
         else:
             self.timpstep_symbol = sympy.Symbol("t")
 
-        if not series_var and (max_iter is None):
+        if not self.series_var and (max_iter is None):
             raise ValueError()
 
         self.slice_step = slice_step
@@ -96,19 +109,16 @@ class IterativeLoss(Loss):
 
         _input_var = []
         _input_var += deepcopy(self.step_loss.input_var)
-        _input_var += series_var
-        _input_var += update_value.values()
+        _input_var += list(self.series_var)
+        _input_var += list(self._update_targets)
 
         self._input_var = sorted(set(_input_var), key=_input_var.index)
 
-        if timestep_var:
-            self._input_var.remove(timestep_var[0])  # delete a time-step variable from input_var
-
-        self.series_var = series_var
+        if self.timestep_var and self.timestep_var in self._input_var:
+            self._input_var.remove(self.timestep_var)
 
     @property
     def _symbol(self):
-        # TODO: naive implementation
         dummy_loss = sympy.Symbol("dummy_loss")
         if self.max_iter:
             max_iter = self.max_iter
@@ -120,44 +130,101 @@ class IterativeLoss(Loss):
         return _symbol
 
     def slice_step_fn(self, t, x):
-        return {k: v[t] for k, v in x.items()}
+        return {k: v.select(self.series_dim, t) for k, v in x.items()}
+
+    def _update_loop_state(self, x_dict):
+        if not self._update_pairs:
+            return
+
+        replaced_values = {}
+        for source_key, target_key in self._update_pairs:
+            if source_key in x_dict:
+                replaced_values[target_key] = x_dict[source_key]
+
+        for source_key, target_key in self._update_pairs:
+            if source_key != target_key and source_key in x_dict:
+                del x_dict[source_key]
+
+        x_dict.update(replaced_values)
 
     def forward(self, x_dict, **kwargs):
         series_x_dict = get_dict_values(x_dict, self.series_var, return_dict=True)
 
-        step_loss_sum = 0
-
-        # set max_iter
         if self.max_iter:
             max_iter = self.max_iter
         else:
-            max_iter = len(series_x_dict[self.series_var[0]])
+            max_iter = series_x_dict[self.series_var[0]].shape[self.series_dim]
 
-        if "mask" in kwargs.keys():
-            mask = kwargs["mask"].float()
+        mask = kwargs.get("mask")
+        if mask is not None:
+            mask = mask.float()
+
+        timestep_var = self.timestep_var
+        step_loss_fn = self.step_loss
+        step_loss_sum = 0
+
+        if self.slice_step:
+            for t in range(max_iter):
+                if timestep_var:
+                    x_dict[timestep_var] = t
+
+                step_loss, samples = step_loss_fn(x_dict, **kwargs)
+                x_dict.update(samples)
+                if mask is not None:
+                    step_loss = step_loss * mask[t]
+                step_loss_sum += step_loss
+                self._update_loop_state(x_dict)
         else:
-            mask = None
+            series_vars = self.series_var
+            for t in range(max_iter):
+                if timestep_var:
+                    x_dict[timestep_var] = t
 
-        for t in range(max_iter):
-            if self.timestep_var:
-                x_dict.update({self.timestep_var[0]: t})
-            if not self.slice_step:
-                # update series inputs & use slice_step_fn
-                x_dict.update(self.slice_step_fn(t, series_x_dict))
+                for var_name in series_vars:
+                    x_dict[var_name] = series_x_dict[var_name].select(self.series_dim, t)
 
-            # evaluate
-            step_loss, samples = self.step_loss.eval(x_dict, return_dict=True, return_all=False)
-            x_dict.update(samples)
-            if mask is not None:
-                step_loss *= mask[t]
-            step_loss_sum += step_loss
+                step_loss, samples = step_loss_fn(x_dict, **kwargs)
+                x_dict.update(samples)
+                if mask is not None:
+                    step_loss = step_loss * mask[t]
+                step_loss_sum += step_loss
+                self._update_loop_state(x_dict)
 
-            # update
-            x_dict = replace_dict_keys(x_dict, self.update_value)
-
-        loss = step_loss_sum
-
-        # Restore original values
         x_dict.update(series_x_dict)
-        # TODO: x_dict contains no-updated variables.
-        return loss, x_dict
+        return step_loss_sum, x_dict
+
+
+class SequentialLoss(IterativeLoss):
+    r"""
+    High-level wrapper for recurrent or sequential objectives.
+
+    This class is equivalent to :class:`IterativeLoss` but uses sequence-oriented
+    argument names and supports choosing the sequence axis explicitly.
+
+    Parameters
+    ----------
+    step_loss : pixyz.losses.Loss
+        Loss evaluated at each time step.
+    sequence_var : list or tuple
+        Variables that contain a time dimension.
+    state_update : dict
+        Mapping from newly generated state variables to the state variables used
+        at the next step. For example, ``{"h": "h_prev"}``.
+    max_steps : int, defaults to None
+        Fixed number of steps. If omitted, this is inferred from the first
+        sequence variable.
+    slice_step : pixyz.distributions.Distribution, defaults to None
+        Optional slicing distribution used by the legacy iterative interface.
+    time_var : str or tuple, defaults to ()
+        Optional time-step variable injected into the step loss.
+    sequence_dim : int, defaults to 0
+        Axis that corresponds to the time dimension in ``sequence_var``.
+    """
+
+    def __init__(self, step_loss, sequence_var=(), state_update=None, max_steps=None,
+                 slice_step=None, time_var=(), sequence_dim=0):
+        if state_update is None:
+            state_update = {}
+        super().__init__(step_loss=step_loss, max_iter=max_steps,
+                         series_var=sequence_var, update_value=state_update,
+                         slice_step=slice_step, timestep_var=time_var, series_dim=sequence_dim)

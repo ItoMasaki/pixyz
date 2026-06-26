@@ -1,3 +1,4 @@
+import math
 import torch
 from torch.distributions import Normal as NormalTorch
 from torch.distributions import Bernoulli as BernoulliTorch
@@ -9,7 +10,7 @@ from torch.distributions import Dirichlet as DirichletTorch
 from torch.distributions import Beta as BetaTorch
 from torch.distributions import Laplace as LaplaceTorch
 from torch.distributions import Gamma as GammaTorch
-from torch.distributions.utils import broadcast_all
+from torch.distributions.utils import broadcast_all, probs_to_logits
 from torch.nn.functional import binary_cross_entropy_with_logits
 
 from ..utils import get_dict_values, sum_samples
@@ -41,6 +42,81 @@ class Normal(DistributionBase):
     def has_reparam(self):
         return True
 
+    @staticmethod
+    def _coerce_param_pair(loc, scale):
+        if torch.is_tensor(loc):
+            ref = loc
+        elif torch.is_tensor(scale):
+            ref = scale
+        else:
+            ref = None
+
+        if not torch.is_tensor(loc):
+            if ref is None:
+                loc = torch.tensor(loc, dtype=torch.float)
+            else:
+                loc = torch.as_tensor(loc, dtype=ref.dtype, device=ref.device)
+        if not torch.is_tensor(scale):
+            scale = torch.as_tensor(scale, dtype=loc.dtype, device=loc.device)
+        return loc, scale
+
+    @staticmethod
+    def _expand_batch_params(batch_n, *params):
+        if not batch_n:
+            return params
+
+        batch_shape = params[0].shape
+        if batch_shape[0] == 1:
+            expand_shape = torch.Size([batch_n]) + batch_shape[1:]
+            return tuple(param.expand(expand_shape) for param in params)
+        if batch_shape[0] == batch_n:
+            return params
+        raise ValueError(f"Batch shape mismatch. batch_shape from parameters: {batch_shape}\n"
+                         f" specified batch size:{batch_n}")
+
+    @staticmethod
+    def _expand_sample_param(param, sample_shape):
+        if sample_shape == torch.Size():
+            return param
+        return param.expand(sample_shape + param.shape)
+
+    def _sample_from_params(self, params, batch_n=None, sample_shape=torch.Size(), reparam=False, sample_mean=False):
+        loc, scale = self._coerce_param_pair(params["loc"], params["scale"])
+        loc, scale = self._expand_batch_params(batch_n, loc, scale)
+
+        if sample_mean:
+            return self._expand_sample_param(loc, torch.Size(sample_shape))
+        else:
+            sample_loc = self._expand_sample_param(loc, torch.Size(sample_shape))
+            sample_scale = self._expand_sample_param(scale, torch.Size(sample_shape))
+            noise = torch.randn_like(sample_scale)
+            return sample_loc + sample_scale * noise
+
+    def _log_prob_from_params(self, params, x_targets, sum_features=True, feature_dims=None):
+        [x_target] = x_targets
+        loc, scale = self._coerce_param_pair(params["loc"], params["scale"])
+        loc, scale, x_target = torch.broadcast_tensors(loc, scale, x_target)
+        variance = scale.pow(2)
+        log_prob = -0.5 * ((x_target - loc) ** 2) / variance - scale.log() - 0.5 * math.log(2. * math.pi)
+        if sum_features:
+            log_prob = sum_samples(log_prob, feature_dims)
+        return log_prob
+
+    def _entropy_from_params(self, params, sum_features=True, feature_dims=None):
+        _, scale = self._coerce_param_pair(0., params["scale"])
+        entropy = scale.log() + 0.5 * (1.0 + math.log(2. * math.pi))
+        if sum_features:
+            entropy = sum_samples(entropy, feature_dims)
+        return entropy
+
+    def _sample_mean_from_params(self, params):
+        loc, _ = self._coerce_param_pair(params["loc"], params["scale"])
+        return loc
+
+    def _sample_variance_from_params(self, params):
+        _, scale = self._coerce_param_pair(params["loc"], params["scale"])
+        return scale.pow(2)
+
 
 class BernoulliTorchOld(BernoulliTorch):
     def log_prob(self, value):
@@ -50,12 +126,14 @@ class BernoulliTorchOld(BernoulliTorch):
 
 class Bernoulli(DistributionBase):
     """Bernoulli distribution parameterized by :attr:`probs`."""
-    def __init__(self, var=['x'], cond_var=[], name='p', features_shape=torch.Size(), probs=None):
-        super().__init__(var, cond_var, name, features_shape, **_valid_param_dict({'probs': probs}))
+    def __init__(self, var=['x'], cond_var=[], name='p', features_shape=torch.Size(), probs=None, logits=None):
+        if probs is not None and logits is not None:
+            raise ValueError("Specify either probs or logits, not both.")
+        super().__init__(var, cond_var, name, features_shape, **_valid_param_dict({'probs': probs, 'logits': logits}))
 
     @property
     def params_keys(self):
-        return ["probs"]
+        return ["logits"] if "logits" in self._buffers else ["probs"]
 
     @property
     def distribution_torch_class(self):
@@ -68,6 +146,112 @@ class Bernoulli(DistributionBase):
     @property
     def has_reparam(self):
         return False
+
+    def _validate_params(self, params):
+        if "logits" in params or "probs" in params:
+            return params
+        raise ValueError(f"{type(self)} class requires following parameters: probs or logits\n"
+                         f"but got {set(params.keys())}")
+
+    @staticmethod
+    def _expand_batch_param(batch_n, param):
+        if not batch_n:
+            return param
+
+        batch_shape = param.shape
+        if batch_shape[0] == 1:
+            return param.expand(torch.Size([batch_n]) + batch_shape[1:])
+        if batch_shape[0] == batch_n:
+            return param
+        raise ValueError(f"Batch shape mismatch. batch_shape from parameters: {batch_shape}\n"
+                         f" specified batch size:{batch_n}")
+
+    @staticmethod
+    def _expand_sample_param(param, sample_shape):
+        if sample_shape == torch.Size():
+            return param
+        return param.expand(sample_shape + param.shape)
+
+    def _get_logits_and_probs(self, params):
+        logits = params.get("logits")
+        probs = params.get("probs")
+        if logits is not None and not torch.is_tensor(logits):
+            logits = torch.tensor(logits, dtype=torch.float)
+        if probs is not None and not torch.is_tensor(probs):
+            if logits is None:
+                probs = torch.tensor(probs, dtype=torch.float)
+            else:
+                probs = torch.as_tensor(probs, dtype=logits.dtype, device=logits.device)
+        if logits is None:
+            logits = probs_to_logits(probs, is_binary=True)
+        elif probs is None:
+            probs = torch.sigmoid(logits)
+        return logits, probs
+
+    def _get_probs(self, params):
+        probs = params.get("probs")
+        logits = params.get("logits")
+        if probs is None:
+            if not torch.is_tensor(logits):
+                logits = torch.tensor(logits, dtype=torch.float)
+            return torch.sigmoid(logits)
+        if not torch.is_tensor(probs):
+            return torch.tensor(probs, dtype=torch.float)
+        return probs
+
+    def set_dist(self, x_dict={}, batch_n=None, **kwargs):
+        params = self._validate_params(self._resolve_params(x_dict, **kwargs))
+        logits, probs = self._get_logits_and_probs(params)
+        if "logits" in params:
+            self._dist = self.distribution_torch_class(logits=logits)
+        else:
+            self._dist = self.distribution_torch_class(probs=probs)
+
+        self._expand_dist_batch(batch_n)
+
+    def _sample_from_params(self, params, batch_n=None, sample_shape=torch.Size(), reparam=False, sample_mean=False):
+        probs = self._get_probs(params)
+        probs = self._expand_batch_param(batch_n, probs)
+
+        if sample_mean:
+            return self._expand_sample_param(probs, torch.Size(sample_shape))
+        else:
+            probs = self._expand_sample_param(probs, torch.Size(sample_shape))
+            return torch.bernoulli(probs)
+
+    def _log_prob_from_params(self, params, x_targets, sum_features=True, feature_dims=None):
+        [x_target] = x_targets
+        if "logits" in params:
+            logits = params["logits"]
+            if not torch.is_tensor(logits):
+                logits = torch.tensor(logits, dtype=torch.float)
+            logits, x_target = torch.broadcast_tensors(logits, x_target)
+            log_prob = -binary_cross_entropy_with_logits(logits, x_target, reduction='none')
+        else:
+            probs = params["probs"]
+            if not torch.is_tensor(probs):
+                probs = torch.tensor(probs, dtype=torch.float)
+            probs, x_target = torch.broadcast_tensors(probs, x_target)
+            probs = probs.clamp(torch.finfo(probs.dtype).tiny, 1. - torch.finfo(probs.dtype).eps)
+            log_prob = x_target * torch.log(probs) + (1. - x_target) * torch.log1p(-probs)
+        if sum_features:
+            log_prob = sum_samples(log_prob, feature_dims)
+        return log_prob
+
+    def _entropy_from_params(self, params, sum_features=True, feature_dims=None):
+        _, probs = self._get_logits_and_probs(params)
+        probs = probs.clamp(1e-6, 1. - 1e-6)
+        entropy = -(probs * probs.log() + (1. - probs) * torch.log1p(-probs))
+        if sum_features:
+            entropy = sum_samples(entropy, feature_dims)
+        return entropy
+
+    def _sample_mean_from_params(self, params):
+        return self._get_probs(params)
+
+    def _sample_variance_from_params(self, params):
+        probs = self._get_probs(params)
+        return probs * (1. - probs)
 
 
 class RelaxedBernoulli(Bernoulli):
@@ -153,6 +337,19 @@ class RelaxedBernoulli(Bernoulli):
             return x_dict
 
         return output_dict
+
+    def get_log_prob(self, x_dict, sum_features=True, feature_dims=None, **kwargs):
+        _x_dict = get_dict_values(x_dict, self._cond_var, return_dict=True)
+        self.set_dist(_x_dict, sampling=False, **kwargs)
+
+        x_targets = get_dict_values(x_dict, self._var)
+        if len(x_targets) == 0:
+            raise ValueError(f"x_dict has no value of the stochastic variable. x_dict: {x_dict}")
+        log_prob = self.dist.log_prob(*x_targets)
+        if sum_features:
+            log_prob = sum_samples(log_prob, feature_dims)
+
+        return log_prob
 
     @property
     def has_reparam(self):
