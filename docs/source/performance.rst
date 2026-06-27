@@ -14,6 +14,10 @@ Recommendations
   with ``series_dim`` set explicitly when sequence data is not time-major.
 - ``Expectation(..., sample_shape=...)`` is vectorized across the Monte Carlo
   axis, so multiple samples no longer require a Python-side evaluation loop.
+- For ``GRUCell`` / ``LSTMCell``-style modules inside
+  :class:`pixyz.distributions.Deterministic`, wrap the cell call with
+  :func:`pixyz.utils.call_sample_batch` so vectorized sample axes are merged
+  into the batch axis automatically.
 - Use ``return_all=False`` when intermediate variables do not need to be kept.
 - For large models, use ``torch.compile`` through
   :func:`pixyz.utils.compile_if_available` on both distributions and the loss
@@ -37,6 +41,23 @@ It gives the same execution semantics as ``IterativeLoss`` with clearer names
         time_var="t",
         sequence_dim=0,
     )
+
+For recurrent deterministic transitions, a ``GRUCell`` can be adapted to
+vectorized Monte Carlo samples without changing the surrounding loss:
+
+.. code-block:: python
+
+    from pixyz.distributions import Deterministic
+    from pixyz.utils import call_sample_batch
+
+    class Transition(Deterministic):
+        def __init__(self, x_dim, z_dim, h_dim):
+            super().__init__(var=["h"], cond_var=["x", "z", "h_prev"])
+            self.rnncell = torch.nn.GRUCell(x_dim + z_dim, h_dim)
+
+        def forward(self, x, z, h_prev):
+            h = call_sample_batch(self.rnncell, torch.cat((x, z), dim=-1), h_prev)
+            return {"h": h}
 
 Benchmarking
 ------------

@@ -3,6 +3,7 @@ from __future__ import print_function
 import torch
 
 from .distributions import Distribution
+from ..utils import broadcast_sample_dict
 
 
 class Deterministic(Distribution):
@@ -47,19 +48,7 @@ class Deterministic(Distribution):
         sample_shape = torch.Size(kwargs.get("sample_shape", torch.Size()))
 
         if sample_shape:
-            expanded_input_dict = {}
-            for key, value in input_dict.items():
-                if not torch.is_tensor(value):
-                    expanded_input_dict[key] = value
-                    continue
-
-                if value.ndim >= len(sample_shape) and tuple(value.shape[:len(sample_shape)]) == tuple(sample_shape):
-                    expanded_input_dict[key] = value
-                    continue
-
-                view_shape = torch.Size([1] * len(sample_shape)) + value.shape
-                expanded_input_dict[key] = value.reshape(view_shape).expand(sample_shape + value.shape)
-            input_dict = expanded_input_dict
+            input_dict = broadcast_sample_dict(input_dict, sample_shape)
 
         output_dict = self.forward(**input_dict)
 

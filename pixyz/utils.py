@@ -154,6 +154,136 @@ def detach_dict(dicts):
     return {k: v.detach() for k, v in dicts.items()}
 
 
+def broadcast_sample_tensor(value, sample_shape):
+    """Broadcast a tensor so that it carries the given sample shape as leading dimensions."""
+    sample_shape = torch.Size(sample_shape)
+    if not sample_shape or not torch.is_tensor(value):
+        return value
+
+    sample_ndims = len(sample_shape)
+    if value.ndim >= sample_ndims and tuple(value.shape[:sample_ndims]) == tuple(sample_shape):
+        return value
+
+    view_shape = torch.Size([1] * sample_ndims) + value.shape
+    return value.reshape(view_shape).expand(sample_shape + value.shape)
+
+
+def broadcast_sample_dict(values, sample_shape):
+    """Broadcast all tensor values in a dictionary along the given sample shape."""
+    if not sample_shape:
+        return values
+    return {key: broadcast_sample_tensor(value, sample_shape) for key, value in values.items()}
+
+
+def flatten_leading_dims(value, trailing_ndims=1):
+    """Flatten all leading dimensions of a tensor into one batch-like dimension.
+
+    Parameters
+    ----------
+    value : torch.Tensor
+        Tensor to reshape.
+    trailing_ndims : int, defaults to 1
+        Number of trailing dimensions to preserve.
+
+    Returns
+    -------
+    flattened : torch.Tensor
+        Reshaped tensor.
+    leading_shape : torch.Size
+        Original leading dimensions for restoring the tensor later.
+    """
+    if not torch.is_tensor(value):
+        raise TypeError("flatten_leading_dims expects a torch.Tensor input.")
+    if trailing_ndims < 0:
+        raise ValueError("trailing_ndims must be non-negative.")
+    if value.ndim < trailing_ndims:
+        raise ValueError("trailing_ndims exceeds the tensor rank.")
+
+    if trailing_ndims == 0:
+        leading_shape = value.shape
+        return value.reshape(-1), leading_shape
+
+    leading_shape = value.shape[:-trailing_ndims]
+    if not leading_shape:
+        return value, torch.Size()
+    return value.reshape((-1,) + value.shape[-trailing_ndims:]), leading_shape
+
+
+def restore_leading_dims(value, leading_shape):
+    """Restore a tensor whose leading dimensions were flattened with :func:`flatten_leading_dims`."""
+    if not torch.is_tensor(value):
+        raise TypeError("restore_leading_dims expects a torch.Tensor input.")
+
+    leading_shape = torch.Size(leading_shape)
+    if not leading_shape:
+        return value
+    return value.reshape(leading_shape + value.shape[1:])
+
+
+def call_sample_batch(fn, *args, trailing_ndims=1, **kwargs):
+    """Call a module or function after flattening sample and batch-like leading dimensions.
+
+    This is useful for layers such as ``GRUCell`` or ``LSTMCell`` that expect
+    rank-2 tensors. All tensor inputs are reshaped by merging their leading
+    dimensions while preserving the last ``trailing_ndims`` dimensions, and the
+    outputs are restored to the original leading shape.
+    """
+    if trailing_ndims < 0:
+        raise ValueError("trailing_ndims must be non-negative.")
+
+    def find_tensor(value):
+        if torch.is_tensor(value):
+            return value
+        if isinstance(value, (tuple, list)):
+            for item in value:
+                result = find_tensor(item)
+                if result is not None:
+                    return result
+        if isinstance(value, dict):
+            for item in value.values():
+                result = find_tensor(item)
+                if result is not None:
+                    return result
+        return None
+
+    reference = find_tensor(args)
+    if reference is None:
+        reference = find_tensor(kwargs)
+    if reference is None:
+        return fn(*args, **kwargs)
+
+    _, leading_shape = flatten_leading_dims(reference, trailing_ndims=trailing_ndims)
+    if not leading_shape:
+        return fn(*args, **kwargs)
+
+    def flatten_value(value):
+        if torch.is_tensor(value):
+            flattened, _ = flatten_leading_dims(value, trailing_ndims=trailing_ndims)
+            return flattened
+        if isinstance(value, tuple):
+            return tuple(flatten_value(item) for item in value)
+        if isinstance(value, list):
+            return [flatten_value(item) for item in value]
+        if isinstance(value, dict):
+            return {key: flatten_value(item) for key, item in value.items()}
+        return value
+
+    def restore_value(value):
+        if torch.is_tensor(value):
+            return restore_leading_dims(value, leading_shape)
+        if isinstance(value, tuple):
+            return tuple(restore_value(item) for item in value)
+        if isinstance(value, list):
+            return [restore_value(item) for item in value]
+        if isinstance(value, dict):
+            return {key: restore_value(item) for key, item in value.items()}
+        return value
+
+    flattened_args = tuple(flatten_value(arg) for arg in args)
+    flattened_kwargs = {key: flatten_value(value) for key, value in kwargs.items()}
+    return restore_value(fn(*flattened_args, **flattened_kwargs))
+
+
 def replace_dict_keys(dicts, replace_list_dict):
     """ Replace values in `dicts` according to `replace_list_dict`.
 

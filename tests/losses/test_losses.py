@@ -2,6 +2,7 @@ import torch
 
 from pixyz.distributions import Deterministic, Normal
 from pixyz.losses import Expectation, Parameter
+from pixyz.utils import call_sample_batch
 
 
 class TestExpectation:
@@ -43,3 +44,50 @@ class TestExpectation:
         e = Expectation(Encoder() * Transition(), Parameter("h").mean(), sample_shape=(3,))
 
         assert torch.equal(e.eval({"x": x}), (2 * x + 1).mean())
+
+    def test_vectorized_expectation_broadcasts_non_sampled_conditionals(self):
+        class Encoder(Deterministic):
+            def __init__(self):
+                super().__init__(var=["z"], cond_var=["x"])
+
+            def forward(self, x):
+                return {"z": x + 1}
+
+        class Decoder(Normal):
+            def __init__(self):
+                super().__init__(var=["y"], cond_var=["x", "z"], name="p")
+
+            def forward(self, x, z):
+                loc = x + z
+                scale = torch.ones_like(loc)
+                return {"loc": loc, "scale": scale}
+
+        x = torch.arange(6, dtype=torch.float32).reshape(2, 3)
+        y = torch.zeros_like(x)
+        e = Expectation(Encoder(), Decoder().log_prob().mean(), sample_shape=(3,))
+
+        loss = e.eval({"x": x, "y": y})
+        assert loss.ndim == 0
+
+    def test_vectorized_expectation_with_gru_cell_helper(self):
+        class Encoder(Deterministic):
+            def __init__(self):
+                super().__init__(var=["z"], cond_var=["x"])
+
+            def forward(self, x):
+                return {"z": x + 1}
+
+        class Transition(Deterministic):
+            def __init__(self):
+                super().__init__(var=["h"], cond_var=["x", "z", "h_prev"])
+                self.rnncell = torch.nn.GRUCell(6, 5)
+
+            def forward(self, x, z, h_prev):
+                return {"h": call_sample_batch(self.rnncell, torch.cat((x, z), dim=-1), h_prev)}
+
+        x = torch.randn(2, 3)
+        h_prev = torch.zeros(2, 5)
+        e = Expectation(Encoder() * Transition(), Parameter("h").mean(), sample_shape=(4,))
+
+        loss = e.eval({"x": x, "h_prev": h_prev})
+        assert loss.ndim == 0

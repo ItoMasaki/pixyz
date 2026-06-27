@@ -7,7 +7,7 @@ from torch.nn.parallel import DistributedDataParallel
 import numbers
 from copy import deepcopy
 
-from ..utils import get_dict_values
+from ..utils import broadcast_sample_dict, get_dict_values
 
 
 class Loss(torch.nn.Module, metaclass=abc.ABCMeta):
@@ -841,6 +841,7 @@ class Expectation(Loss):
                                              sample_shape=self.sample_shape, **kwargs)
         input_dict = x_dict.copy()
         input_dict.update(batched_samples_dict)
+        input_dict = broadcast_sample_dict(input_dict, self.sample_shape)
 
         vectorized_kwargs = dict(kwargs)
         vectorized_kwargs["_mc_sample_ndims"] = existing_sample_ndims + local_sample_ndims
