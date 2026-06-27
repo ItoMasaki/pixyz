@@ -111,7 +111,7 @@ def get_dict_values(dicts, keys, return_dict=False):
     >>> get_dict_values({"a":1,"b":2,"c":3}, ["b", "d"], True)
     {'b': 2}
     """
-    new_dicts = dict((key, dicts[key]) for key in keys if key in list(dicts.keys()))
+    new_dicts = {key: dicts[key] for key in keys if key in dicts}
     if return_dict is False:
         return list(new_dicts.values())
 
@@ -306,7 +306,7 @@ def replace_dict_keys(dicts, replace_list_dict):
     >>> replace_dict_keys({"a":1,"b":2,"c":3}, {"a":"x","e":"y"})  # keys of `replace_list_dict`
     {'x': 1, 'b': 2, 'c': 3}
     """
-    replaced_dicts = dict([(replace_list_dict[key], value) if key in list(replace_list_dict.keys())
+    replaced_dicts = dict([(replace_list_dict[key], value) if key in replace_list_dict
                            else (key, value) for key, value in dicts.items()])
 
     return replaced_dicts
@@ -340,10 +340,10 @@ def replace_dict_keys_split(dicts, replace_list_dict):
 
     """
     replaced_dict = {replace_list_dict[key]: value for key, value in dicts.items()
-                     if key in list(replace_list_dict.keys())}
+                     if key in replace_list_dict}
 
     remain_dict = {key: value for key, value in dicts.items()
-                   if key not in list(replace_list_dict.keys())}
+                   if key not in replace_list_dict}
 
     return replaced_dict, remain_dict
 
