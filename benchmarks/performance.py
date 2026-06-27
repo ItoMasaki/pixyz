@@ -12,7 +12,7 @@ if ROOT_DIR not in sys.path:
 
 from pixyz.distributions import Bernoulli, Deterministic, Normal
 from pixyz.losses import IterativeLoss
-from pixyz.utils import call_sample_batch, compile_if_available
+from pixyz.utils import compile_if_available
 
 
 class Decoder(Bernoulli):
@@ -41,7 +41,7 @@ class Recurrence(Deterministic):
         self.rnncell = torch.nn.GRUCell(x_dim + z_dim, h_dim)
 
     def forward(self, x, z, h_prev):
-        return {"h": call_sample_batch(self.rnncell, torch.cat((z, x), dim=-1), h_prev)}
+        return {"h": self.rnncell(torch.cat((z, x), dim=-1), h_prev)}
 
 
 def build_loss(x_dim, z_dim, h_dim, use_compile=False):

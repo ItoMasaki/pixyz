@@ -3,7 +3,29 @@ from __future__ import print_function
 import torch
 
 from .distributions import Distribution
-from ..utils import broadcast_sample_dict
+from ..utils import broadcast_sample_dict, call_sample_batch
+
+
+_AUTO_SAMPLE_BATCH_MODULE_TYPES = (
+    torch.nn.RNNCell,
+    torch.nn.GRUCell,
+    torch.nn.LSTMCell,
+)
+
+
+class _SampleBatchModuleProxy:
+    def __init__(self, module, trailing_ndims):
+        self._module = module
+        self._trailing_ndims = trailing_ndims
+
+    def __call__(self, *args, **kwargs):
+        return call_sample_batch(self._module, *args, trailing_ndims=self._trailing_ndims, **kwargs)
+
+    def __getattr__(self, item):
+        return getattr(self._module, item)
+
+    def __repr__(self):
+        return repr(self._module)
 
 
 class Deterministic(Distribution):
@@ -38,6 +60,27 @@ class Deterministic(Distribution):
 
     def __init__(self, var, cond_var=[], name='p', **kwargs):
         super().__init__(var=var, cond_var=cond_var, name=name, **kwargs)
+        self._sample_batch_module_specs = {}
+
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        if isinstance(value, _AUTO_SAMPLE_BATCH_MODULE_TYPES):
+            specs = self.__dict__.get("_sample_batch_module_specs")
+            if specs is not None:
+                specs.setdefault(name, 1)
+
+    def __getattr__(self, item):
+        attr = super().__getattr__(item)
+        specs = self.__dict__.get("_sample_batch_module_specs")
+        if specs and item in specs:
+            return _SampleBatchModuleProxy(attr, specs[item])
+        return attr
+
+    def register_sample_batch_module(self, name, trailing_ndims=1):
+        self._sample_batch_module_specs[name] = trailing_ndims
+
+    def unregister_sample_batch_module(self, name):
+        self._sample_batch_module_specs.pop(name, None)
 
     @property
     def distribution_name(self):
