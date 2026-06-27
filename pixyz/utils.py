@@ -231,6 +231,28 @@ def call_sample_batch(fn, *args, trailing_ndims=1, **kwargs):
     if trailing_ndims < 0:
         raise ValueError("trailing_ndims must be non-negative.")
 
+    if not kwargs:
+        if len(args) == 2 and torch.is_tensor(args[0]) and torch.is_tensor(args[1]):
+            input_value, state_value = args
+            flattened_input, leading_shape = flatten_leading_dims(input_value, trailing_ndims=trailing_ndims)
+            if not leading_shape:
+                return fn(input_value, state_value)
+            flattened_state, _ = flatten_leading_dims(state_value, trailing_ndims=trailing_ndims)
+            return restore_leading_dims(fn(flattened_input, flattened_state), leading_shape)
+
+        if len(args) == 2 and torch.is_tensor(args[0]) and isinstance(args[1], tuple) and len(args[1]) == 2 \
+                and torch.is_tensor(args[1][0]) and torch.is_tensor(args[1][1]):
+            input_value = args[0]
+            state_h, state_c = args[1]
+            flattened_input, leading_shape = flatten_leading_dims(input_value, trailing_ndims=trailing_ndims)
+            if not leading_shape:
+                return fn(input_value, (state_h, state_c))
+            flattened_h, _ = flatten_leading_dims(state_h, trailing_ndims=trailing_ndims)
+            flattened_c, _ = flatten_leading_dims(state_c, trailing_ndims=trailing_ndims)
+            output_h, output_c = fn(flattened_input, (flattened_h, flattened_c))
+            return (restore_leading_dims(output_h, leading_shape),
+                    restore_leading_dims(output_c, leading_shape))
+
     def find_tensor(value):
         if torch.is_tensor(value):
             return value
