@@ -44,12 +44,20 @@ class Factor:
         self.dist = atom_dist
         self.name_dict = {}
         self.option = {}
+        self._reversed_name_dict_cache = None
+        self._global_var_cache = {}
 
     def copy(self):
         inst = Factor(self.dist)
         inst.name_dict = dict(self.name_dict)
         inst.option = dict(self.option)
+        inst._reversed_name_dict_cache = dict(self._reversed_name_dict) if self.name_dict else {}
+        inst._global_var_cache = dict(self._global_var_cache)
         return inst
+
+    def _clear_caches(self):
+        self._reversed_name_dict_cache = None
+        self._global_var_cache = {}
 
     def rename_var(self, replace_dict):
         name_dict = self.name_dict
@@ -61,10 +69,13 @@ class Factor:
                 name_dict[new_var_name] = local_var
             else:
                 name_dict[new_var_name] = var_name
+        self._clear_caches()
 
     @property
     def _reversed_name_dict(self):
-        return {value: key for key, value in self.name_dict.items()}
+        if self._reversed_name_dict_cache is None:
+            self._reversed_name_dict_cache = {value: key for key, value in self.name_dict.items()}
+        return self._reversed_name_dict_cache
 
     @staticmethod
     def __apply_dict(dict, var):
@@ -73,12 +84,21 @@ class Factor:
     def _get_local_input_dict(self, values, input_var=None):
         if not input_var:
             input_var = self.dist.input_var
-        global_input_var = self.__apply_dict(self._reversed_name_dict, input_var)
+        input_var = tuple(input_var)
+        if not self.name_dict:
+            global_input_var = input_var
+        else:
+            global_input_var = self._global_var_cache.get(input_var)
+            if global_input_var is None:
+                global_input_var = tuple(self.__apply_dict(self._reversed_name_dict, input_var))
+                self._global_var_cache[input_var] = global_input_var
 
         if any(var_name not in values for var_name in global_input_var):
             raise ValueError("lack of some variables")
         input_dict = get_dict_values(values, global_input_var, return_dict=True)
 
+        if not self.name_dict:
+            return input_dict
         local_input_dict = replace_dict_keys(input_dict, self.name_dict)
         return local_input_dict
 
@@ -86,8 +106,11 @@ class Factor:
         local_input_dict = self._get_local_input_dict(values)
 
         # Overwrite log_prob_option with self.option to give priority to local settings such as batch_n
-        option = dict(sample_option)
-        option.update(self.option)
+        if self.option:
+            option = dict(sample_option)
+            option.update(self.option)
+        else:
+            option = sample_option
         local_output_dict = self.dist.sample(local_input_dict, **option)
 
         # TODO: It shows return_hidden option change graphical model. This is bad operation.
@@ -97,6 +120,8 @@ class Factor:
             raise Exception(f"The sample method of {self.dist.distribution_name} returns different variables."
                             f" Expected:{list(self.dist.var)}, Got:{list(local_output_dict)}")
 
+        if not self.name_dict:
+            return local_output_dict
         sample = replace_dict_keys(local_output_dict, self._reversed_name_dict)
         return sample
 
@@ -104,8 +129,11 @@ class Factor:
         local_input_dict = self._get_local_input_dict(values, list(self.dist.var) + list(self.dist.cond_var))
 
         # Overwrite log_prob_option with self.option to give priority to local settings such as batch_n
-        option = dict(log_prob_option)
-        option.update(self.option)
+        if self.option:
+            option = dict(log_prob_option)
+            option.update(self.option)
+        else:
+            option = log_prob_option
         log_prob = self.dist.get_log_prob(local_input_dict, **option)
         return log_prob
 
@@ -131,15 +159,36 @@ class Factor:
 
     @property
     def input_var(self):
-        return self.__apply_dict(self._reversed_name_dict, self.dist.input_var)
+        if not self.name_dict:
+            return self.dist.input_var
+        input_var = tuple(self.dist.input_var)
+        mapped_var = self._global_var_cache.get(input_var)
+        if mapped_var is None:
+            mapped_var = tuple(self.__apply_dict(self._reversed_name_dict, input_var))
+            self._global_var_cache[input_var] = mapped_var
+        return list(mapped_var)
 
     @property
     def var(self):
-        return self.__apply_dict(self._reversed_name_dict, self.dist.var)
+        if not self.name_dict:
+            return self.dist.var
+        var = tuple(self.dist.var)
+        mapped_var = self._global_var_cache.get(var)
+        if mapped_var is None:
+            mapped_var = tuple(self.__apply_dict(self._reversed_name_dict, var))
+            self._global_var_cache[var] = mapped_var
+        return list(mapped_var)
 
     @property
     def cond_var(self):
-        return self.__apply_dict(self._reversed_name_dict, self.dist.cond_var)
+        if not self.name_dict:
+            return self.dist.cond_var
+        cond_var = tuple(self.dist.cond_var)
+        mapped_var = self._global_var_cache.get(cond_var)
+        if mapped_var is None:
+            mapped_var = tuple(self.__apply_dict(self._reversed_name_dict, cond_var))
+            self._global_var_cache[cond_var] = mapped_var
+        return list(mapped_var)
 
     @property
     def prob_text(self):
