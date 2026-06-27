@@ -690,6 +690,11 @@ class BatchMean(LossSelfOperator):
     def forward(self, x_dict={}, **kwargs):
         loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False,
                                        _skip_input_check=True, _skip_dict_filter=True, **kwargs)
+        sample_ndims = kwargs.get("_mc_sample_ndims", 0)
+        if sample_ndims and loss.ndim > sample_ndims:
+            return loss.mean(dim=tuple(range(sample_ndims, loss.ndim))), x_dict
+        if sample_ndims:
+            return loss, x_dict
         return loss.mean(), x_dict
 
 
@@ -726,6 +731,11 @@ class BatchSum(LossSelfOperator):
     def forward(self, x_dict={}, **kwargs):
         loss, x_dict = self.loss1.eval(x_dict, return_dict=True, return_all=False,
                                        _skip_input_check=True, _skip_dict_filter=True, **kwargs)
+        sample_ndims = kwargs.get("_mc_sample_ndims", 0)
+        if sample_ndims and loss.ndim > sample_ndims:
+            return loss.sum(dim=tuple(range(sample_ndims, loss.ndim))), x_dict
+        if sample_ndims:
+            return loss, x_dict
         return loss.sum(), x_dict
 
 
@@ -803,8 +813,19 @@ class Expectation(Loss):
         p_text = "{" + self.p.prob_text + "}"
         return sympy.Symbol("\\mathbb{{E}}_{} \\left[{} \\right]".format(p_text, self.f.loss_text))
 
+    @staticmethod
+    def _take_first_sample(value, sample_ndims):
+        if sample_ndims == 0 or not torch.is_tensor(value):
+            return value
+        for _ in range(sample_ndims):
+            value = value[0]
+        return value
+
     def forward(self, x_dict={}, **kwargs):
         sample_count = self.sample_shape.numel()
+        local_sample_ndims = len(self.sample_shape)
+        existing_sample_ndims = kwargs.get("_mc_sample_ndims", 0)
+
         if sample_count == 1:
             samples_dict = self.p.sample(x_dict, reparam=self.reparam, return_all=False, **kwargs)
             input_dict = x_dict.copy()
@@ -818,24 +839,20 @@ class Expectation(Loss):
 
         batched_samples_dict = self.p.sample(x_dict, reparam=self.reparam, return_all=False,
                                              sample_shape=self.sample_shape, **kwargs)
+        input_dict = x_dict.copy()
+        input_dict.update(batched_samples_dict)
 
-        flattened_samples = {}
-        for key, value in batched_samples_dict.items():
-            flattened_samples[key] = value.reshape((sample_count,) + value.shape[len(self.sample_shape):])
+        vectorized_kwargs = dict(kwargs)
+        vectorized_kwargs["_mc_sample_ndims"] = existing_sample_ndims + local_sample_ndims
+        loss, loss_sample_dict = self.f.eval(input_dict, return_dict=True, return_all=False,
+                                             _skip_input_check=True, _skip_dict_filter=True, **vectorized_kwargs)
+        loss = loss.mean(dim=tuple(range(local_sample_ndims)))
 
-        loss_and_dicts = []
-        for sample_index in range(sample_count):
-            samples_dict = {key: value[sample_index] for key, value in flattened_samples.items()}
-            input_dict = x_dict.copy()
-            input_dict.update(samples_dict)
-            loss_and_dicts.append(self.f.eval(input_dict, return_dict=True, return_all=False,
-                                              _skip_input_check=True, _skip_dict_filter=True, **kwargs))
-
-        losses = [loss for loss, _ in loss_and_dicts]
-        loss = torch.stack(losses).mean(dim=0)
         output_dict = {}
-        output_dict.update({key: value[0] for key, value in flattened_samples.items()})
-        output_dict.update(loss_and_dicts[0][1])
+        output_dict.update({key: self._take_first_sample(value, local_sample_ndims)
+                            for key, value in batched_samples_dict.items()})
+        output_dict.update({key: self._take_first_sample(value, local_sample_ndims)
+                            for key, value in loss_sample_dict.items()})
 
         return loss, output_dict
 

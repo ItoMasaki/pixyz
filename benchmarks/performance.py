@@ -49,13 +49,15 @@ def build_loss(x_dim, z_dim, h_dim, use_compile=False):
     q = Encoder(x_dim=x_dim, h_dim=h_dim, z_dim=z_dim)
     f = Recurrence(x_dim=x_dim, z_dim=z_dim, h_dim=h_dim)
 
+    step_loss_cls = p.log_prob().expectation(q * f).mean()
+    loss_cls = IterativeLoss(step_loss=step_loss_cls, series_var=["x"], update_value={"h": "h_prev"})
+
     if use_compile:
         p = compile_if_available(p)
         q = compile_if_available(q)
         f = compile_if_available(f)
+        loss_cls = compile_if_available(loss_cls)
 
-    step_loss_cls = p.log_prob().expectation(q * f).mean()
-    loss_cls = IterativeLoss(step_loss=step_loss_cls, series_var=["x"], update_value={"h": "h_prev"})
     return loss_cls, (p, q, f)
 
 

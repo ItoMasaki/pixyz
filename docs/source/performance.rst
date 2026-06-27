@@ -12,12 +12,12 @@ Recommendations
   activation and conversion work.
 - Use :class:`pixyz.losses.SequentialLoss` or :class:`pixyz.losses.IterativeLoss`
   with ``series_dim`` set explicitly when sequence data is not time-major.
-- Keep ``sample_shape`` small unless Monte Carlo variance is a real issue. When
-  multiple samples are required, Pixyz now batches the sampling path, but the
-  downstream loss may still dominate.
+- ``Expectation(..., sample_shape=...)`` is vectorized across the Monte Carlo
+  axis, so multiple samples no longer require a Python-side evaluation loop.
 - Use ``return_all=False`` when intermediate variables do not need to be kept.
 - For large models, use ``torch.compile`` through
-  :func:`pixyz.utils.compile_if_available`.
+  :func:`pixyz.utils.compile_if_available` on both distributions and the loss
+  object.
 
 Sequence Models
 ---------------

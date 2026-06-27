@@ -426,6 +426,10 @@ def compile_if_available(module, **kwargs):
     if compile_fn is None:
         return module
     try:
+        module_compile = getattr(module, "compile", None)
+        if callable(module_compile):
+            module_compile(**kwargs)
+            return module
         return compile_fn(module, **kwargs)
     except Exception as exc:
         warnings.warn(f"torch.compile failed, returning the original module instead: {exc}")

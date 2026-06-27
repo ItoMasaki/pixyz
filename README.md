@@ -224,8 +224,8 @@ mean \left(D_{KL} \left[q(z|x)||p_{prior}(z) \right] - \mathbb{E}_{q(z|x)} \left
 
 - Prefer `Bernoulli(logits=...)` or returning `{"logits": ...}` from decoders instead of `probs`.
 - Use `SequentialLoss` for recurrent objectives and set `sequence_dim` explicitly when data is not time-major.
-- Keep `sample_shape` small unless multiple Monte Carlo samples are necessary.
-- Use `pixyz.utils.compile_if_available` when running on recent PyTorch versions.
+- `Expectation(..., sample_shape=...)` is now vectorized across the Monte Carlo axis, so prefer batched samples over Python loops.
+- Use `pixyz.utils.compile_if_available` on both distributions and the loss object when running on recent PyTorch versions.
 - Track regressions with `python benchmarks/performance.py`.
 
 When evaluating this loss function given data, use the `eval` method.
