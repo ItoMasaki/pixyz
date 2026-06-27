@@ -223,7 +223,7 @@ mean \left(D_{KL} \left[q(z|x)||p_{prior}(z) \right] - \mathbb{E}_{q(z|x)} \left
 ## Performance Tips
 
 - Prefer `Bernoulli(logits=...)` or returning `{"logits": ...}` from decoders instead of `probs`.
-- Use `SequentialLoss` for recurrent objectives and set `sequence_dim` explicitly when data is not time-major.
+- Use `IterativeLoss` for recurrent objectives and set `series_dim` explicitly when data is not time-major.
 - `Expectation(..., sample_shape=...)` is now vectorized across the Monte Carlo axis, so prefer batched samples over Python loops.
 - `GRUCell` / `LSTMCell` / `RNNCell` inside `Deterministic` are sample-axis aware automatically. Use `pixyz.utils.call_sample_batch(...)` only for other custom modules that need the same behavior.
 - Use `pixyz.utils.compile_if_available` on both distributions and the loss object when running on recent PyTorch versions.

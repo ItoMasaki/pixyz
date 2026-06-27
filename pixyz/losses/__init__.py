@@ -35,7 +35,6 @@ from .losses import (
 
 from .iteration import (
     IterativeLoss,
-    SequentialLoss,
 )
 
 from .mmd import (
@@ -65,7 +64,6 @@ __all__ = [
     'AdversarialKullbackLeibler',
     'AdversarialWassersteinDistance',
     'IterativeLoss',
-    'SequentialLoss',
     'MMD',
     'WassersteinDistance',
 ]

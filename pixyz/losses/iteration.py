@@ -192,39 +192,3 @@ class IterativeLoss(Loss):
 
         x_dict.update(series_x_dict)
         return step_loss_sum, x_dict
-
-
-class SequentialLoss(IterativeLoss):
-    r"""
-    High-level wrapper for recurrent or sequential objectives.
-
-    This class is equivalent to :class:`IterativeLoss` but uses sequence-oriented
-    argument names and supports choosing the sequence axis explicitly.
-
-    Parameters
-    ----------
-    step_loss : pixyz.losses.Loss
-        Loss evaluated at each time step.
-    sequence_var : list or tuple
-        Variables that contain a time dimension.
-    state_update : dict
-        Mapping from newly generated state variables to the state variables used
-        at the next step. For example, ``{"h": "h_prev"}``.
-    max_steps : int, defaults to None
-        Fixed number of steps. If omitted, this is inferred from the first
-        sequence variable.
-    slice_step : pixyz.distributions.Distribution, defaults to None
-        Optional slicing distribution used by the legacy iterative interface.
-    time_var : str or tuple, defaults to ()
-        Optional time-step variable injected into the step loss.
-    sequence_dim : int, defaults to 0
-        Axis that corresponds to the time dimension in ``sequence_var``.
-    """
-
-    def __init__(self, step_loss, sequence_var=(), state_update=None, max_steps=None,
-                 slice_step=None, time_var=(), sequence_dim=0):
-        if state_update is None:
-            state_update = {}
-        super().__init__(step_loss=step_loss, max_iter=max_steps,
-                         series_var=sequence_var, update_value=state_update,
-                         slice_step=slice_step, timestep_var=time_var, series_dim=sequence_dim)

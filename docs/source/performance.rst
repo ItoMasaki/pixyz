@@ -10,8 +10,8 @@ Recommendations
 
 - Prefer ``logits`` over ``probs`` for Bernoulli decoders to avoid redundant
   activation and conversion work.
-- Use :class:`pixyz.losses.SequentialLoss` or :class:`pixyz.losses.IterativeLoss`
-  with ``series_dim`` set explicitly when sequence data is not time-major.
+- Use :class:`pixyz.losses.IterativeLoss` with ``series_dim`` set explicitly
+  when sequence data is not time-major.
 - ``Expectation(..., sample_shape=...)`` is vectorized across the Monte Carlo
   axis, so multiple samples no longer require a Python-side evaluation loop.
 - ``GRUCell`` / ``LSTMCell`` / ``RNNCell`` inside
@@ -26,20 +26,19 @@ Recommendations
 Sequence Models
 ---------------
 
-``SequentialLoss`` is the preferred high-level interface for recurrent losses.
-It gives the same execution semantics as ``IterativeLoss`` with clearer names
- and explicit control over the sequence axis.
+``IterativeLoss`` is the sequence-loss interface for recurrent objectives and
+supports explicit control over the sequence axis.
 
 .. code-block:: python
 
-    from pixyz.losses import SequentialLoss
+    from pixyz.losses import IterativeLoss
 
-    loss = SequentialLoss(
+    loss = IterativeLoss(
         step_loss=step_loss,
-        sequence_var=["x"],
-        state_update={"h": "h_prev"},
-        time_var="t",
-        sequence_dim=0,
+        series_var=["x"],
+        update_value={"h": "h_prev"},
+        timestep_var="t",
+        series_dim=0,
     )
 
 For recurrent deterministic transitions, ``GRUCell`` now works with vectorized

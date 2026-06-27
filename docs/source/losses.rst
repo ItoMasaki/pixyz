@@ -125,13 +125,6 @@ IterativeLoss
     :members:
     :undoc-members:
 
-SequentialLoss
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: SequentialLoss
-    :members:
-    :undoc-members:
-
 Loss for special purpose
 ----------------------------
 
