@@ -227,7 +227,13 @@ class Loss(torch.nn.Module, metaclass=abc.ABCMeta):
         loss, eval_dict = self(input_dict, **kwargs)
 
         if return_dict:
-            output_dict = x_dict.copy() if return_all else {}
+            if not return_all:
+                return loss, eval_dict
+            if not x_dict:
+                return loss, eval_dict
+            if not eval_dict:
+                return loss, x_dict.copy()
+            output_dict = x_dict.copy()
             output_dict.update(eval_dict)
             return loss, output_dict
 
@@ -828,19 +834,29 @@ class Expectation(Loss):
 
         if sample_count == 1:
             samples_dict = self.p.sample(x_dict, reparam=self.reparam, return_all=False, **kwargs)
-            input_dict = x_dict.copy()
-            input_dict.update(samples_dict)
+            if x_dict:
+                input_dict = x_dict.copy()
+                input_dict.update(samples_dict)
+            else:
+                input_dict = samples_dict
             loss, loss_sample_dict = self.f.eval(input_dict, return_dict=True, return_all=False,
                                                  _skip_input_check=True, _skip_dict_filter=True, **kwargs)
-            output_dict = {}
-            output_dict.update(samples_dict)
-            output_dict.update(loss_sample_dict)
+            if not loss_sample_dict:
+                output_dict = samples_dict
+            elif not samples_dict:
+                output_dict = loss_sample_dict
+            else:
+                output_dict = dict(samples_dict)
+                output_dict.update(loss_sample_dict)
             return loss, output_dict
 
         batched_samples_dict = self.p.sample(x_dict, reparam=self.reparam, return_all=False,
                                              sample_shape=self.sample_shape, **kwargs)
-        input_dict = x_dict.copy()
-        input_dict.update(batched_samples_dict)
+        if x_dict:
+            input_dict = x_dict.copy()
+            input_dict.update(batched_samples_dict)
+        else:
+            input_dict = batched_samples_dict
         input_dict = broadcast_sample_dict(input_dict, self.sample_shape)
 
         vectorized_kwargs = dict(kwargs)

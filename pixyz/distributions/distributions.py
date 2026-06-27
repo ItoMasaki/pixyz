@@ -1623,6 +1623,17 @@ class DistributionBase(Distribution):
         return self.get_params(params_dict, **kwargs)
 
     def _get_params_internal(self, params_dict={}, **kwargs):
+        if type(self).forward is DistributionBase.forward:
+            if not self._replace_param_keys:
+                if not self._constant_params_dict:
+                    return params_dict
+                output_dict = dict(params_dict)
+                output_dict.update(self._constant_params_dict)
+                return output_dict
+
+            if not params_dict:
+                return dict(self._constant_params_dict)
+
         replaced_params_dict = {}
         replace_params_dict = self.replace_params_dict
         replace_param_keys = self._replace_param_keys
@@ -1634,8 +1645,10 @@ class DistributionBase(Distribution):
         vars_dict = {key: value for key, value in params_dict.items() if key not in replace_param_keys}
         output_dict = self(**vars_dict)
 
-        output_dict.update(replaced_params_dict)
-        output_dict.update(self._constant_params_dict)
+        if replaced_params_dict:
+            output_dict.update(replaced_params_dict)
+        if self._constant_params_dict:
+            output_dict.update(self._constant_params_dict)
 
         return output_dict
 

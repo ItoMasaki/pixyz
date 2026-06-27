@@ -61,6 +61,7 @@ class Deterministic(Distribution):
     def __init__(self, var, cond_var=[], name='p', **kwargs):
         super().__init__(var=var, cond_var=cond_var, name=name, **kwargs)
         self._sample_batch_module_specs = {}
+        self._sample_batch_module_proxies = {}
 
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
@@ -68,19 +69,27 @@ class Deterministic(Distribution):
             specs = self.__dict__.get("_sample_batch_module_specs")
             if specs is not None:
                 specs.setdefault(name, 1)
+            proxies = self.__dict__.get("_sample_batch_module_proxies")
+            if proxies is not None:
+                proxies.pop(name, None)
 
     def __getattr__(self, item):
         attr = super().__getattr__(item)
         specs = self.__dict__.get("_sample_batch_module_specs")
         if specs and item in specs:
-            return _SampleBatchModuleProxy(attr, specs[item])
+            proxies = self.__dict__.get("_sample_batch_module_proxies")
+            if item not in proxies:
+                proxies[item] = _SampleBatchModuleProxy(attr, specs[item])
+            return proxies[item]
         return attr
 
     def register_sample_batch_module(self, name, trailing_ndims=1):
         self._sample_batch_module_specs[name] = trailing_ndims
+        self._sample_batch_module_proxies.pop(name, None)
 
     def unregister_sample_batch_module(self, name):
         self._sample_batch_module_specs.pop(name, None)
+        self._sample_batch_module_proxies.pop(name, None)
 
     @property
     def distribution_name(self):
@@ -99,6 +108,8 @@ class Deterministic(Distribution):
             raise ValueError("Output variables are not the same as `var`.")
 
         if return_all:
+            if not x_dict:
+                return output_dict
             x_dict = x_dict.copy()
             x_dict.update(output_dict)
             return x_dict
@@ -148,6 +159,8 @@ class EmpiricalDistribution(Distribution):
         output_dict = self._get_input_dict(x_dict)
 
         if return_all:
+            if not x_dict:
+                return output_dict
             x_dict = x_dict.copy()
             x_dict.update(output_dict)
             return x_dict
